@@ -61,6 +61,7 @@ public final class Pescador {
 		List<BlockPos> caminho = List.of();
 		int idx, timer;
 		Vec3 ultimaPos = Vec3.ZERO;
+		int re, remouEm; // ticks de ré para desencalhar; último tick em que remou
 		Modo modo = Modo.NAVEGANDO;
 		// pesca
 		Boia boia;
@@ -197,31 +198,104 @@ public final class Pescador {
 		olhar(level, v, s, r);
 	}
 
-	/** Rema até o próximo ponto do caminho. Devolve true se encalhou. */
+	/**
+	 * Rema seguindo o caminho: mira num ponto mais à frente (até 3,5 blocos, só se a linha até ele for toda
+	 * água), diminui nas curvas fechadas e quando o barranco está logo à frente, desviando para o lado com
+	 * mais água. Se ficar parado, dá ré um pouco. Devolve true quando precisa de um caminho novo.
+	 */
 	private static boolean remar(ServerLevel level, Villager v, AbstractBoat barco, Estado s, RandomSource r) {
+		Vec3 pos = barco.position();
+		if (relogio - s.remouEm > 1) s.ultimaPos = pos; // voltou a remar depois de parar: não é encalhe
+		s.remouEm = relogio;
+		// passa pelos pontos que já ficaram para trás; numa curva só passa bem no meio do bloco
+		// (a caixa do barco não gira, então ele precisa estar centrado para caber no canal novo)
+		while (s.idx < s.caminho.size() - 1) {
+			BlockPos c = s.caminho.get(s.idx);
+			double raio = curva(s.caminho, s.idx) ? 0.45 : 1.4;
+			if (Math.pow(c.getX() + 0.5 - pos.x, 2) + Math.pow(c.getZ() + 0.5 - pos.z, 2) >= raio * raio) break;
+			s.idx++;
+		}
+		BlockPos fim = s.caminho.get(s.caminho.size() - 1);
+		if (s.idx == s.caminho.size() - 1 && Math.pow(fim.getX() + 0.5 - pos.x, 2) + Math.pow(fim.getZ() + 0.5 - pos.z, 2) < 1.2) {
+			s.idx = s.caminho.size();
+			return false;
+		}
 		BlockPos alvo = s.caminho.get(s.idx);
-		double dx = alvo.getX() + 0.5 - barco.getX(), dz = alvo.getZ() + 0.5 - barco.getZ();
-		if (dx * dx + dz * dz < 1.5) { s.idx++; return false; }
+		for (int k = s.idx + 1; k < s.caminho.size(); k++) {
+			BlockPos q = s.caminho.get(k);
+			if (Math.pow(q.getX() + 0.5 - pos.x, 2) + Math.pow(q.getZ() + 0.5 - pos.z, 2) > 3.5 * 3.5 || !retaDeAgua(level, pos, q)) break;
+			alvo = q;
+		}
 
-		// vira suavemente na direção do próximo ponto e rema para a frente
+		float yaw = barco.getYRot();
+		double rad = yaw * Mth.DEG_TO_RAD;
+		Vec3 frente = new Vec3(-Mth.sin(rad), 0, Mth.cos(rad));
+		if (s.re > 0) { // ré: sai do barranco e vira para o caminho
+			s.re--;
+			barco.setDeltaMovement(-frente.x * VELOCIDADE * 0.6, barco.getDeltaMovement().y, -frente.z * VELOCIDADE * 0.6);
+			return s.re == 0;
+		}
+
+		double dx = alvo.getX() + 0.5 - pos.x, dz = alvo.getZ() + 0.5 - pos.z;
 		float querido = (float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG);
 		if (s.bebado) querido += 35f * Mth.sin(relogio * 0.04f); // rema em zigue-zague
-		float yaw = barco.getYRot() + Mth.clamp(Mth.wrapDegrees(querido - barco.getYRot()), -5f, 5f);
+		// barranco logo à frente? desvia para o lado com mais água
+		double vel = VELOCIDADE;
+		if (!aguaEm(level, pos.add(frente.scale(1.3)), barco.getY())) {
+			Vec3 esq = new Vec3(frente.z, 0, -frente.x);
+			boolean livreEsq = aguaEm(level, pos.add(frente.scale(0.9)).add(esq.scale(1.0)), barco.getY());
+			boolean livreDir = aguaEm(level, pos.add(frente.scale(0.9)).subtract(esq.scale(1.0)), barco.getY());
+			if (livreEsq != livreDir) querido += livreEsq ? -40f : 40f;
+			vel *= 0.3;
+		}
+		float erro = Mth.wrapDegrees(querido - yaw);
+		yaw += Mth.clamp(erro, -6f, 6f);
+		vel *= Mth.clamp(1f - Math.abs(erro) / 70f, 0.15f, 1f); // curva fechada: vira quase parado
 		barco.setYRot(yaw);
 		barco.setYHeadRot(yaw);
-		double rad = yaw * Mth.DEG_TO_RAD;
-		Vec3 m = barco.getDeltaMovement();
-		barco.setDeltaMovement(-Mth.sin(rad) * VELOCIDADE, m.y, Mth.cos(rad) * VELOCIDADE);
+		rad = yaw * Mth.DEG_TO_RAD;
+		// empurrãozinho de lado de volta para o meio do caminho (o barco não consegue andar de lado sozinho)
+		BlockPos meio = s.caminho.get(Math.max(0, s.idx - 1));
+		double lx = meio.getX() + 0.5 - pos.x, lz = meio.getZ() + 0.5 - pos.z;
+		double fx = -Mth.sin(rad), fz = Mth.cos(rad), ao = lx * fx + lz * fz;
+		lx -= fx * ao; lz -= fz * ao; // só a parte de lado
+		barco.setDeltaMovement(fx * vel + Mth.clamp(lx * 0.15, -0.03, 0.03), barco.getDeltaMovement().y, fz * vel + Mth.clamp(lz * 0.15, -0.03, 0.03));
 		v.getLookControl().setLookAt(alvo.getX() + 0.5, barco.getY() + 0.6, alvo.getZ() + 0.5);
 		if (relogio % 30 == 0) level.playSound(null, barco.getX(), barco.getY(), barco.getZ(), SoundEvents.BOAT_PADDLE_WATER, SoundSource.NEUTRAL, 0.4f, 0.9f + r.nextFloat() * 0.2f);
 
-		// encalhou?
-		if (relogio % 40 == 0) {
-			boolean preso = barco.position().distanceToSqr(s.ultimaPos) < 0.05;
-			s.ultimaPos = barco.position();
-			return preso;
+		// encalhou? dá ré e depois pede um caminho novo
+		if (relogio % 30 == 0) {
+			boolean preso = pos.distanceToSqr(s.ultimaPos) < 0.04;
+			s.ultimaPos = pos;
+			if (preso) s.re = 15;
 		}
 		return false;
+	}
+
+	/** O caminho muda de direção nesse ponto? */
+	private static boolean curva(List<BlockPos> c, int i) {
+		if (i <= 0 || i >= c.size() - 1) return false;
+		BlockPos a = c.get(i - 1), b = c.get(i), d = c.get(i + 1);
+		return (b.getX() - a.getX()) != (d.getX() - b.getX()) || (b.getZ() - a.getZ()) != (d.getZ() - b.getZ());
+	}
+
+	/** Tem água (superfície) no bloco desse ponto, na altura do barco? */
+	private static boolean aguaEm(Level level, Vec3 p, double y) {
+		return agua(level, BlockPos.containing(p.x, y - 0.3, p.z));
+	}
+
+	/** A linha reta do barco até esse ponto passa só por água, com folga para a largura do barco? */
+	private static boolean retaDeAgua(Level level, Vec3 de, BlockPos ate) {
+		Vec3 para = Vec3.atBottomCenterOf(ate);
+		double dx = para.x - de.x, dz = para.z - de.z, len = Math.sqrt(dx * dx + dz * dz);
+		if (len < 0.01) return true;
+		double nx = -dz / len * 0.75, nz = dx / len * 0.75; // meia largura do barco (1,375) com folga
+		for (double t = 0; t <= len; t += 0.5) {
+			double x = de.x + dx * t / len, z = de.z + dz * t / len;
+			for (int lado = -1; lado <= 1; lado++)
+				if (!agua(level, BlockPos.containing(x + nx * lado, ate.getY(), z + nz * lado))) return false;
+		}
+		return true;
 	}
 
 	private static void frear(AbstractBoat barco, double f) {
@@ -473,12 +547,7 @@ public final class Pescador {
 			BlockPos pisa = doca(level, p);
 			if (pisa != null) {
 				s.doca = pisa;
-				LinkedList<BlockPos> c = new LinkedList<>();
-				for (BlockPos q = p; !q.equals(ini); q = pai.get(q)) c.addFirst(q);
-				List<BlockPos> pontos = new ArrayList<>();
-				for (int i = 1; i < c.size(); i += 2) pontos.add(c.get(i));
-				if (!c.isEmpty() && (pontos.isEmpty() || !pontos.get(pontos.size() - 1).equals(p))) pontos.add(p);
-				s.caminho = pontos;
+				s.caminho = caminho(pai, ini, p);
 				return true;
 			}
 			for (BlockPos q : new BlockPos[]{p.north(), p.south(), p.east(), p.west()}) {
@@ -700,35 +769,47 @@ public final class Pescador {
 		return level.getFluidState(p).is(FluidTags.WATER) && level.getBlockState(p.above()).isAir();
 	}
 
-	/** Busca em largura pela superfície da água e escolhe um destino aleatório alcançável. */
+	/**
+	 * Escolhe um destino aleatório alcançável pela água e vai até ele pelo meio do riacho:
+	 * busca com custo (Dijkstra) em que andar colado na margem custa mais.
+	 */
 	private static void planejar(ServerLevel level, AbstractBoat barco, Estado s, RandomSource r) {
 		s.caminho = List.of(); s.idx = 0;
 		BlockPos ini = BlockPos.containing(barco.getX(), barco.getY() - 0.3, barco.getZ());
 		if (!agua(level, ini)) return;
 		Map<BlockPos, BlockPos> pai = new HashMap<>();
-		Map<BlockPos, Integer> dist = new HashMap<>();
-		ArrayDeque<BlockPos> fila = new ArrayDeque<>();
-		fila.add(ini); dist.put(ini, 0);
+		Map<BlockPos, Integer> passos = new HashMap<>();
+		Map<BlockPos, Double> custo = new HashMap<>();
+		PriorityQueue<BlockPos> fila = new PriorityQueue<>(Comparator.comparingDouble(custo::get));
+		custo.put(ini, 0.0); passos.put(ini, 0); fila.add(ini);
 		List<BlockPos> candidatos = new ArrayList<>();
-		while (!fila.isEmpty() && dist.size() < BUSCA_MAX) {
+		Set<BlockPos> feito = new HashSet<>();
+		while (!fila.isEmpty() && feito.size() < BUSCA_MAX) {
 			BlockPos p = fila.poll();
-			int d = dist.get(p);
+			if (!feito.add(p)) continue;
+			int d = passos.get(p);
 			if (d >= 8 && d <= 28) candidatos.add(p);
 			for (BlockPos q : new BlockPos[]{p.north(), p.south(), p.east(), p.west()}) {
-				if (dist.containsKey(q) || q.distManhattan(s.casa) > LONGE_DE_CASA || !agua(level, q)) continue;
-				dist.put(q, d + 1); pai.put(q, p); fila.add(q);
+				if (feito.contains(q) || q.distManhattan(s.casa) > LONGE_DE_CASA || !agua(level, q)) continue;
+				double c = custo.get(p) + 1 + (9 - largura(level, q)) * 0.7; // margem perto = mais caro
+				if (c < custo.getOrDefault(q, Double.MAX_VALUE)) {
+					custo.put(q, c); passos.put(q, d + 1); pai.put(q, p); fila.add(q);
+				}
 			}
 		}
 		if (candidatos.isEmpty()) return;
 		// prefere pontos com água dos lados (meio do riacho)
 		candidatos.sort(Comparator.comparingInt(p -> -largura(level, p)));
 		BlockPos alvo = candidatos.get(r.nextInt(Math.max(1, candidatos.size() / 2)));
+		s.caminho = caminho(pai, ini, alvo);
+	}
+
+	/** Refaz o caminho de 'ini' até 'alvo' (todos os blocos; o remar escolhe para onde mirar). */
+	private static List<BlockPos> caminho(Map<BlockPos, BlockPos> pai, BlockPos ini, BlockPos alvo) {
 		LinkedList<BlockPos> c = new LinkedList<>();
 		for (BlockPos p = alvo; p != null && !p.equals(ini); p = pai.get(p)) c.addFirst(p);
-		List<BlockPos> pontos = new ArrayList<>();
-		for (int i = 1; i < c.size(); i += 2) pontos.add(c.get(i)); // um ponto a cada 2 blocos
-		if (pontos.isEmpty() || !pontos.get(pontos.size() - 1).equals(alvo)) pontos.add(alvo);
-		s.caminho = pontos;
+		if (c.isEmpty()) c.add(alvo);
+		return new ArrayList<>(c);
 	}
 
 	private static int largura(Level level, BlockPos p) {

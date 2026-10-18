@@ -1,5 +1,6 @@
 package br.hirozn.bauchefe.client;
 
+import br.hirozn.bauchefe.AnimPesca;
 import br.hirozn.bauchefe.BauChefe;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -10,7 +11,6 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
@@ -29,21 +29,19 @@ public final class Balao {
 
 	/**
 	 * 'palavras': a fala em palavras; 'tempos': segundo em que cada uma é dita (null = sem áudio);
-	 * 'seg': quanto já passou. Efeito karaokê: a palavra fica em negrito quando ele fala.
-	 * As posições são medidas em negrito, então o balão não muda de tamanho nem o texto anda.
-	 * 'altura': topo da entidade (blocos), já com espaço para o nome se ele aparecer.
+	 * 'seg': quanto já passou. Efeito karaokê: cada palavra começa cinza e escurece até o preto
+	 * quando ele fala. 'altura': topo da entidade (blocos).
 	 */
 	public static void desenhar(String[] palavras, float[] tempos, float seg, float alpha, double altura,
 	                            PoseStack pose, SubmitNodeCollector out, CameraRenderState camera, int luz) {
 		if (alpha <= 0.02f || palavras.length == 0) return;
 		Font font = Minecraft.getInstance().font;
-		int espaco = font.width(Component.literal(" ").withStyle(ChatFormatting.BOLD));
-		// quebra de linha medida em negrito
+		int espaco = font.width(" ");
 		int[] larg = new int[palavras.length], linha = new int[palavras.length], xPal = new int[palavras.length];
 		List<Integer> largLinha = new ArrayList<>();
 		int x = 0, n = 0;
 		for (int i = 0; i < palavras.length; i++) {
-			larg[i] = font.width(Component.literal(palavras[i]).withStyle(ChatFormatting.BOLD));
+			larg[i] = font.width(palavras[i]);
 			if (x > 0 && x + espaco + larg[i] > LARGURA_MAX) { largLinha.add(x); n++; x = 0; }
 			if (x > 0) x += espaco;
 			linha[i] = n;
@@ -55,11 +53,12 @@ public final class Balao {
 		for (int l : largLinha) w = Math.max(w, l);
 		int linhas = largLinha.size(), h = font.lineHeight * linhas;
 		float a = alpha;
-		// sobe e cresce um pouquinho ao aparecer
+		// cresce um pouquinho ao aparecer
 		float esc = 0.025f * (0.85f + 0.15f * Mth.clamp(alpha * 2f, 0f, 1f));
 
 		pose.pushPose();
-		pose.translate(0.0, altura + 0.5 + 0.1 * linhas, 0.0);
+		// altura fixa (já com o espaço do nome), para o balão não pular quando o nome aparece
+		pose.translate(0.0, altura + 0.8 + 0.1 * linhas, 0.0);
 		pose.rotate(camera.orientation);
 		pose.scale(esc, -esc, esc);
 		final int fw = w, fh = h;
@@ -67,11 +66,12 @@ public final class Balao {
 		// texto no mesmo plano do balão; o polygon offset puxa ele para a frente (como nas placas)
 		int alfa = Math.max(26, (int) (a * 255)) << 24;
 		for (int i = 0; i < palavras.length; i++) {
-			boolean dita = tempos != null && i < tempos.length && seg >= tempos[i];
-			Component c = dita ? Component.literal(palavras[i]).withStyle(ChatFormatting.BOLD) : Component.literal(palavras[i]);
-			int cor = alfa | (tempos == null || dita ? 0x000000 : 0x3A3A3A); // ainda não dita: um pouco mais clara
-			float lx = -largLinha.get(linha[i]) / 2f + xPal[i] + (dita ? 0 : (larg[i] - font.width(c)) / 2f);
-			out.submitText(pose, lx, -h / 2f + linha[i] * font.lineHeight, c.getVisualOrderText(), false,
+			// 0 = ainda não falada (cinza), 1 = já falada (preto); a troca leva 0,3 s
+			float dita = tempos == null || i >= tempos.length ? 1f : Mth.clamp((seg - tempos[i]) / 0.3f, 0f, 1f);
+			int cinza = (int) Mth.lerp(AnimPesca.inOutSine(dita), 0x9A, 0x00);
+			int cor = alfa | cinza << 16 | cinza << 8 | cinza;
+			float lx = -largLinha.get(linha[i]) / 2f + xPal[i];
+			out.submitText(pose, lx, -h / 2f + linha[i] * font.lineHeight, Component.literal(palavras[i]).getVisualOrderText(), false,
 					Font.DisplayMode.POLYGON_OFFSET, luz, cor, 0, 0);
 		}
 		pose.popPose();

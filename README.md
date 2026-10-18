@@ -6,6 +6,7 @@ Mod Fabric "Baú Chefe" (bauchefe) para Minecraft 26.3.
 - **Uso:** mod sem fins comerciais; não é vendido nem distribuído comercialmente.
 - **Animações do Márcio pescador:** inspiradas no resource pack [Fresh Animations](https://modrinth.com/resourcepack/fresh-animations), de **FreshLX**. Ele foi a referência de estilo para os movimentos pequenos e contínuos, a respiração, a piscada, as pupilas que acompanham o olhar e as pernas sentadas no barco. Tudo foi reimplementado em código próprio, sem usar arquivos, modelos (.jem/.jpm) ou texturas do Fresh Animations. Todos os direitos sobre o Fresh Animations são de FreshLX.
 - **Voz do Márcio:** as falas (lista em [FALAS.md](FALAS.md)) foram geradas com [ElevenLabs](https://elevenlabs.io), voz de ID `PZb5BTdLd4vD52f25mcy` (Voice Library do ElevenLabs). Créditos à ElevenLabs e a quem criou essa voz.
+- **Som da voz:** a forma de calcular o volume pela distância (queda cúbica), pela direção em que o Márcio está virado e pelas paredes no caminho foi inspirada no [Plasmo Voice](https://github.com/plasmoapp/plasmo-voice), de **Plasmo** (licença LGPL-3.0). Reimplementado em código próprio, sem copiar o código do Plasmo Voice.
 - **Balões de fala:** o visual e a textura do balão (`assets/bauchefe/textures/entity/balao.png`) foram portados do mod [Notable Bubble Text (NBT)](https://github.com/Mrbysco/NotableBubbleText), de **Mrbysco**, sob a licença MIT:
 
   > MIT License — Copyright (c) 2023 Mrbysco
