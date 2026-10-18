@@ -1,0 +1,22 @@
+{
+	"schemaVersion": 1,
+	"id": "bauchefe",
+	"version": "${version}",
+	"name": "Baú Chefe",
+	"description": "Um baú chefe que organiza os baús em volta pelas molduras e abre um painel de estoque com Shift+V.",
+	"authors": ["hirozn", "giizanini", "Claude"],
+	"license": "MIT",
+	"icon": "assets/bauchefe/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["br.hirozn.bauchefe.BauChefe"],
+		"client": ["br.hirozn.bauchefe.client.BauChefeClient"]
+	},
+	"mixins": ["bauchefe.mixins.json", "bauchefe.timber.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

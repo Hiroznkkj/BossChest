@@ -1,0 +1,9 @@
+{
+ "parent": "minecraft:block/orientable_with_bottom",
+ "textures": {
+  "top": "bauchefe:block/bau_chefe_top_ativo",
+  "bottom": "bauchefe:block/bau_chefe_bottom",
+  "side": "bauchefe:block/bau_chefe_side_ativo",
+  "front": "bauchefe:block/bau_chefe_front_ativo"
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "type": "minecraft:crafting_shaped",
+ "category": "misc",
+ "pattern": [
+  "DGD",
+  "GCG",
+  "DGD"
+ ],
+ "key": {
+  "D": "minecraft:diamond",
+  "G": "minecraft:gold_ingot",
+  "C": "minecraft:chest"
+ },
+ "result": {
+  "id": "bauchefe:bau_chefe",
+  "count": 1
+ }
+}

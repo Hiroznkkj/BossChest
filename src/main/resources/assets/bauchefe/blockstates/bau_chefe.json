@@ -1,0 +1,34 @@
+{
+ "variants": {
+  "ativo=false,facing=north": {
+   "model": "bauchefe:block/bau_chefe"
+  },
+  "ativo=true,facing=north": {
+   "model": "bauchefe:block/bau_chefe_ativo"
+  },
+  "ativo=false,facing=east": {
+   "model": "bauchefe:block/bau_chefe",
+   "y": 90
+  },
+  "ativo=true,facing=east": {
+   "model": "bauchefe:block/bau_chefe_ativo",
+   "y": 90
+  },
+  "ativo=false,facing=south": {
+   "model": "bauchefe:block/bau_chefe",
+   "y": 180
+  },
+  "ativo=true,facing=south": {
+   "model": "bauchefe:block/bau_chefe_ativo",
+   "y": 180
+  },
+  "ativo=false,facing=west": {
+   "model": "bauchefe:block/bau_chefe",
+   "y": 270
+  },
+  "ativo=true,facing=west": {
+   "model": "bauchefe:block/bau_chefe_ativo",
+   "y": 270
+  }
+ }
+}

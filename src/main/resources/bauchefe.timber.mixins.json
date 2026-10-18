@@ -1,0 +1,7 @@
+{
+	"required": false,
+	"package": "br.hirozn.bauchefe.mixin.timber",
+	"compatibilityLevel": "JAVA_25",
+	"server": ["TreeFellerMixin"],
+	"injectors": { "defaultRequire": 0 }
+}
