@@ -25,6 +25,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.chicken.Chicken;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.npc.villager.VillagerData;
@@ -51,7 +52,7 @@ public final class Pescador {
 	private static final int LONGE_DE_CASA = 48, BUSCA_MAX = 900;
 	private static final double VELOCIDADE = 0.07;
 
-	private enum Modo { NAVEGANDO, INDO_DOCA, PARADO_NOITE, EM_TERRA, VOLTANDO, PERSEGUINDO }
+	private enum Modo { NAVEGANDO, INDO_DOCA, PARADO_NOITE, EM_TERRA, VOLTANDO, PERSEGUINDO, FUGINDO }
 
 	/** Marca do barco do Márcio (tag da entidade) e do dono dele. */
 	public static final String TAG_BARCO = "bauchefe.barco_do_marcio", TAG_DONO = "bauchefe.dono.";
@@ -78,6 +79,9 @@ public final class Pescador {
 		Vec3 olharPonto;
 		final Map<UUID, Integer> cumprimentou = new HashMap<>();
 		UUID ladrao;
+		BlockPos barril; // posto de trabalho (marca a doca)
+		int calma; // ticks sem monstro por perto, fugindo
+		int esperar; // sem caminho nem lugar para pescar: espera um pouco antes de tentar de novo
 		boolean bebado; // de vez em quando acorda bêbado: fala bobagem e rema torto o dia todo
 		// /bauchefe marcio testar: resultado forçado da pesca, mordida rápida, fora do barco até, fila do "tudo"
 		Boolean testeFisga, testeDificil;
@@ -107,7 +111,7 @@ public final class Pescador {
 					if (relogio % 100 == 0) { largarBoia(s); it.remove(); }
 					continue;
 				}
-				if (relogio % 100 == 0) chapeu(level, v);
+				if (relogio % 100 == 0) { profissao(level, v); s.barril = barril(level, v); }
 				vida(level, v, s);
 				if (s.remontarEm > 0) { if (relogio >= s.remontarEm) remontar(level, v, s); continue; } // teste fora do barco
 				if (s.demo != null) demo(level, v, s);
@@ -168,12 +172,27 @@ public final class Pescador {
 		}
 	}
 
-	/** Chapéu de palha: profissão farmer no nível 5, com XP para não perder a profissão. */
-	private static void chapeu(ServerLevel level, Villager v) {
+	/**
+	 * Profissão de pescador no nível 5, com XP para não perder. O posto de trabalho do pescador é o barril:
+	 * o barril que ele pegar (perto da água) marca a doca dele (ver planejarDoca).
+	 */
+	private static void profissao(ServerLevel level, Villager v) {
 		VillagerData d = v.getVillagerData();
-		if (!d.profession().is(VillagerProfession.FARMER) || d.level() < 5)
-			v.setVillagerData(d.withProfession(level.registryAccess(), VillagerProfession.FARMER).withLevel(5));
+		if (!d.profession().is(VillagerProfession.FISHERMAN)) {
+			// solta o posto antigo (ex.: composteira do farmer) para outro villager poder usar
+			v.getBrain().getMemory(MemoryModuleType.JOB_SITE).ifPresent(g -> { if (g.dimension() == level.dimension()) level.getPoiManager().release(g.pos()); });
+			v.getBrain().eraseMemory(MemoryModuleType.JOB_SITE);
+			v.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
+		}
+		if (!d.profession().is(VillagerProfession.FISHERMAN) || d.level() < 5)
+			v.setVillagerData(d.withProfession(level.registryAccess(), VillagerProfession.FISHERMAN).withLevel(5));
 		if (v.getVillagerXp() <= 0) v.setVillagerXp(1);
+	}
+
+	/** Barril de trabalho do pescador (marca a doca), ou null. */
+	private static BlockPos barril(ServerLevel level, Villager v) {
+		return v.getBrain().getMemory(MemoryModuleType.JOB_SITE)
+				.filter(g -> g.dimension() == level.dimension()).map(g -> g.pos()).orElse(null);
 	}
 
 	private static void segurarVara(Villager v) {
@@ -190,17 +209,30 @@ public final class Pescador {
 		segurarVara(v);
 		if (relogio % 100 == 0) marcarBarco(barco, v);
 		s.timer--;
+		// monstro por perto: larga tudo e foge com o barco para a doca
+		if (s.modo != Modo.FUGINDO && relogio % 10 == 0) {
+			Entity m = monstro(level, barco, 12);
+			if (m != null) { fugir(level, v, barco, s, m); return; }
+		}
+		if (s.modo == Modo.FUGINDO) { fugindo(level, v, barco, s, r); return; }
 		if (s.boia != null) { pescar(level, v, barco, s, r); return; } // termina a pesca mesmo se anoitecer
 		if (relogio < s.animFim) { animando(level, v, barco, s); return; }
 		if (noite(level)) { noturno(level, v, barco, s); return; }
 		if (s.modo != Modo.NAVEGANDO) { s.modo = Modo.NAVEGANDO; s.caminho = List.of(); s.idx = 0; }
 
 		if (s.idx >= s.caminho.size()) {
+			if (relogio < s.esperar) { frear(barco, 0.6); olhar(level, v, s, r); return; }
 			// parado entre um trecho e outro: às vezes faz uma animação à toa
 			if (relogio >= s.proximaAnim && comecarAnim(level, v, barco, s, r, 0)) return;
-			if (s.timer <= 0 && r.nextFloat() < 0.6f) { comecarPesca(level, v, barco, s, r); return; }
-			planejar(level, barco, s, r);
-			if (s.caminho.isEmpty()) { comecarPesca(level, v, barco, s, r); return; }
+			if (s.timer <= 0 && r.nextFloat() < 0.6f && comecarPesca(level, v, barco, s, r)) return;
+			planejar(level, barco, s, r, null);
+			if (s.caminho.isEmpty()) {
+				// sem caminho: pesca dali mesmo; se nem isso, espera 2 s e empurra o barco para o meio da água
+				if (comecarPesca(level, v, barco, s, r)) return;
+				s.esperar = relogio + 40;
+				centralizar(level, barco);
+				return;
+			}
 		}
 		if (remar(level, v, barco, s, r)) { s.caminho = List.of(); s.idx = 0; }
 		olhar(level, v, s, r);
@@ -259,14 +291,20 @@ public final class Pescador {
 		float querido = (float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG);
 		if (s.bebado) querido += 35f * Mth.sin(relogio * 0.04f); // rema em zigue-zague
 		// barranco logo à frente? desvia para o lado com mais água
-		double vel = VELOCIDADE;
-		if (!aguaEm(level, pos.add(frente.scale(1.3)), barco.getY())) {
-			Vec3 esq = new Vec3(frente.z, 0, -frente.x);
-			boolean livreEsq = aguaEm(level, pos.add(frente.scale(0.9)).add(esq.scale(1.0)), barco.getY());
-			boolean livreDir = aguaEm(level, pos.add(frente.scale(0.9)).subtract(esq.scale(1.0)), barco.getY());
-			if (livreEsq != livreDir) querido += livreEsq ? -40f : 40f;
-			vel *= 0.3;
+		double vel = VELOCIDADE * (s.modo == Modo.FUGINDO ? 1.7 : 1.0);
+		// raios: se o rumo desejado bate na margem logo ali, testa rumos vizinhos e pega o mais livre
+		// (com folga para a largura do barco); e diminui quando a água à frente é curta
+		double y = barco.getY();
+		if (raio(level, pos, querido, 4, y) < 2.5) {
+			float melhor = 0;
+			double nota = -1e9;
+			for (int a = -75; a <= 75; a += 15) {
+				double n = raio(level, pos, querido + a, 4, y) - Math.abs(a) / 40.0;
+				if (n > nota) { nota = n; melhor = a; }
+			}
+			querido += melhor;
 		}
+		vel *= Mth.clamp(raio(level, pos, yaw, 4, y) / 2.5, 0.25, 1.0);
 		float erro = Mth.wrapDegrees(querido - yaw);
 		yaw += Mth.clamp(erro, -6f, 6f);
 		vel *= Mth.clamp(1f - Math.abs(erro) / 70f, 0.15f, 1f); // curva fechada: vira quase parado
@@ -305,15 +343,7 @@ public final class Pescador {
 		}
 		for (int k = s.idx; k < Math.min(s.caminho.size(), s.idx + 2); k++) s.evitar.put(s.caminho.get(k), relogio + 1200);
 		if (s.travas >= 3) {
-			BlockPos aqui = BlockPos.containing(pos.x, barco.getY() - 0.3, pos.z), melhor = null;
-			for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-				BlockPos q = aqui.offset(dx, 0, dz);
-				if (agua(level, q) && (melhor == null || largura(level, q) > largura(level, melhor))) melhor = q;
-			}
-			if (melhor != null) {
-				Vec3 c = Vec3.atBottomCenterOf(melhor);
-				barco.setDeltaMovement((c.x - pos.x) * 0.2, barco.getDeltaMovement().y, (c.z - pos.z) * 0.2);
-			}
+			centralizar(level, barco);
 			s.travas = 0;
 		}
 	}
@@ -331,6 +361,44 @@ public final class Pescador {
 		if (i <= 0 || i >= c.size() - 1) return false;
 		BlockPos a = c.get(i - 1), b = c.get(i), d = c.get(i + 1);
 		return (b.getX() - a.getX()) != (d.getX() - b.getX()) || (b.getZ() - a.getZ()) != (d.getZ() - b.getZ());
+	}
+
+	/** Quanto dá para andar em linha reta nesse rumo (graus, como o yaw) até bater na margem, até 'max' blocos. */
+	private static double raio(Level level, Vec3 de, float rumo, double max, double y) {
+		double rad = rumo * Mth.DEG_TO_RAD, fx = -Mth.sin(rad), fz = Mth.cos(rad), lx = -fz * 0.65, lz = fx * 0.65;
+		for (double t = 0.4; t <= max; t += 0.25) {
+			double x = de.x + fx * t, z = de.z + fz * t;
+			if (!aguaEm(level, new Vec3(x, 0, z), y) || !aguaEm(level, new Vec3(x + lx, 0, z + lz), y)
+					|| !aguaEm(level, new Vec3(x - lx, 0, z - lz), y)) return t;
+		}
+		return max;
+	}
+
+	/** Empurra o barco de leve para o bloco de água mais livre por perto. */
+	private static void centralizar(ServerLevel level, AbstractBoat barco) {
+		Vec3 pos = barco.position();
+		BlockPos aqui = BlockPos.containing(pos.x, barco.getY() - 0.3, pos.z), melhor = null;
+		for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+			BlockPos q = aqui.offset(dx, 0, dz);
+			if (agua(level, q) && (melhor == null || largura(level, q) > largura(level, melhor))) melhor = q;
+		}
+		if (melhor == null) return;
+		Vec3 c = Vec3.atBottomCenterOf(melhor);
+		barco.setDeltaMovement((c.x - pos.x) * 0.2, barco.getDeltaMovement().y, (c.z - pos.z) * 0.2);
+	}
+
+	/** Bloco de água de onde partir: o de baixo do barco ou, se ele está na beirada, o mais perto. */
+	private static BlockPos partida(Level level, AbstractBoat barco) {
+		BlockPos ini = BlockPos.containing(barco.getX(), barco.getY() - 0.3, barco.getZ());
+		if (agua(level, ini)) return ini;
+		BlockPos melhor = null;
+		double best = Double.MAX_VALUE;
+		for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
+			BlockPos q = ini.offset(dx, 0, dz);
+			double d = Vec3.atBottomCenterOf(q).distanceToSqr(barco.getX(), q.getY(), barco.getZ());
+			if (agua(level, q) && d < best) { best = d; melhor = q; }
+		}
+		return melhor;
 	}
 
 	/** Tem água (superfície) no bloco desse ponto, na altura do barco? */
@@ -359,17 +427,21 @@ public final class Pescador {
 
 	// ---------- pesca ----------
 
-	private static void comecarPesca(ServerLevel level, Villager v, AbstractBoat barco, Estado s, RandomSource r) {
+	/** Joga a boia: procura água livre ao redor (prefere à direita e à frente). Devolve false se não achou. */
+	private static boolean comecarPesca(ServerLevel level, Villager v, AbstractBoat barco, Estado s, RandomSource r) {
 		double rad = barco.getYRot() * Mth.DEG_TO_RAD;
-		Vec3 frente = new Vec3(-Mth.sin(rad), 0, Mth.cos(rad)), lado = new Vec3(frente.z, 0, -frente.x);
+		Vec3 frente = new Vec3(-Mth.sin(rad), 0, Mth.cos(rad)), dir = new Vec3(-frente.z, 0, frente.x);
 		Vec3 alvo = null;
-		// a vara fica na mão direita: prefere jogar para a direita e para a frente
-		for (Vec3 d : new Vec3[]{lado.scale(-1).add(frente.scale(0.5)), frente, lado.scale(-1), lado, frente.scale(-1)}) {
-			Vec3 p = barco.position().add(d.normalize().scale(3.5));
-			BlockPos bp = BlockPos.containing(p.x, barco.getY() - 0.3, p.z);
-			if (agua(level, bp)) { alvo = new Vec3(p.x, bp.getY() + level.getFluidState(bp).getHeight(level, bp) - 0.05, p.z); break; }
-		}
-		if (alvo == null) { s.timer = 200; planejar(level, barco, s, r); return; }
+		Vec3[] direcoes = {dir.add(frente.scale(0.5)), frente, dir, frente.subtract(dir.scale(0.5)), dir.scale(-1),
+				dir.subtract(frente.scale(0.5)), frente.scale(-1)};
+		busca:
+		for (double dist : new double[]{3.5, 2.5, 5.0})
+			for (Vec3 d : direcoes) {
+				Vec3 p = barco.position().add(d.normalize().scale(dist));
+				BlockPos bp = BlockPos.containing(p.x, barco.getY() - 0.3, p.z);
+				if (agua(level, bp)) { alvo = new Vec3(p.x, bp.getY() + level.getFluidState(bp).getHeight(level, bp) - 0.05, p.z); break busca; }
+			}
+		if (alvo == null) { s.timer = 200; return false; }
 		Boia b = new Boia(BauChefe.BOIA, level);
 		b.snapTo(alvo.x, alvo.y, alvo.z, 0, 0);
 		b.setDono(v);
@@ -378,6 +450,7 @@ public final class Pescador {
 		s.boia = b;
 		s.faseT = 0;
 		barco.setDeltaMovement(0, barco.getDeltaMovement().y, 0);
+		return true;
 	}
 
 	private static void mudar(Estado s, int fase) {
@@ -594,6 +667,15 @@ public final class Pescador {
 		return level.getBlockState(p).getCollisionShape(level, p).isEmpty() && level.getFluidState(p).isEmpty();
 	}
 
+	/** Água a até 3 blocos do barril: devolve onde pisar ao lado do barril (ou em cima dele), ou null. */
+	private static BlockPos pertoDoBarril(Level level, BlockPos agua, BlockPos barril) {
+		if (Math.abs(agua.getX() - barril.getX()) + Math.abs(agua.getZ() - barril.getZ()) > 3 || Math.abs(agua.getY() - barril.getY()) > 3) return null;
+		for (Direction d : Direction.Plane.HORIZONTAL)
+			for (BlockPos q : new BlockPos[]{barril.relative(d), barril.relative(d).above()})
+				if (livre(level, q) && livre(level, q.above()) && !level.getBlockState(q.below()).getCollisionShape(level, q.below()).isEmpty()) return q;
+		return livre(level, barril.above()) && livre(level, barril.above(2)) ? barril.above() : null;
+	}
+
 	/** Doca: madeira na borda da água com espaço para ficar em pé. Devolve onde pisar, ou null. */
 	private static BlockPos doca(Level level, BlockPos agua) {
 		for (Direction d : Direction.Plane.HORIZONTAL) {
@@ -604,17 +686,20 @@ public final class Pescador {
 		return null;
 	}
 
-	/** Busca em largura pela água até a doca mais próxima e monta o caminho até ela. */
+	/**
+	 * Busca em largura pela água até a doca e monta o caminho até ela. A doca é a água perto do barril de
+	 * trabalho dele (se tiver); senão, a madeira na beira da água mais próxima.
+	 */
 	private static boolean planejarDoca(ServerLevel level, AbstractBoat barco, Estado s) {
 		s.caminho = List.of(); s.idx = 0;
-		BlockPos ini = BlockPos.containing(barco.getX(), barco.getY() - 0.3, barco.getZ());
-		if (!agua(level, ini)) return false;
+		BlockPos ini = partida(level, barco);
+		if (ini == null) return false;
 		Map<BlockPos, BlockPos> pai = new HashMap<>();
 		ArrayDeque<BlockPos> fila = new ArrayDeque<>();
 		fila.add(ini); pai.put(ini, ini);
 		while (!fila.isEmpty() && pai.size() < BUSCA_MAX * 2) {
 			BlockPos p = fila.poll();
-			BlockPos pisa = doca(level, p);
+			BlockPos pisa = s.barril != null ? pertoDoBarril(level, p, s.barril) : doca(level, p);
 			if (pisa != null) {
 				s.doca = pisa;
 				s.caminho = caminho(pai, ini, p);
@@ -626,6 +711,41 @@ public final class Pescador {
 			}
 		}
 		return false;
+	}
+
+	// ---------- fuga ----------
+
+	/** Monstro mais perto do barco, a até 'raio' blocos, ou null. */
+	private static Entity monstro(ServerLevel level, AbstractBoat barco, double raio) {
+		Entity melhor = null;
+		double best = raio * raio;
+		for (Entity e : level.getEntities((Entity) null, barco.getBoundingBox().inflate(raio), e -> e instanceof Enemy && e.isAlive())) {
+			double d = e.distanceToSqr(barco);
+			if (d < best) { best = d; melhor = e; }
+		}
+		return melhor;
+	}
+
+	/** Viu um monstro: larga a pesca e rema rápido para a doca (ou para longe, se não tiver doca). */
+	private static void fugir(ServerLevel level, Villager v, AbstractBoat barco, Estado s, Entity m) {
+		largarBoia(s);
+		s.animFim = 0;
+		s.modo = Modo.FUGINDO;
+		s.calma = 0;
+		if (!planejarDoca(level, barco, s)) planejar(level, barco, s, level.getRandom(), m.position());
+		v.getLookControl().setLookAt(m, 30f, 30f);
+		falar(level, v, s, Falas.Tipo.MEDO, null, true);
+	}
+
+	/** Fugindo: rema até a doca e espera lá até passar 10 s sem monstro por perto. */
+	private static void fugindo(ServerLevel level, Villager v, AbstractBoat barco, Estado s, RandomSource r) {
+		Entity m = relogio % 10 == 0 ? monstro(level, barco, 16) : null;
+		if (relogio % 10 == 0) s.calma = m == null ? s.calma + 10 : 0;
+		if (s.calma >= 200) { s.modo = Modo.NAVEGANDO; s.caminho = List.of(); s.idx = 0; return; }
+		if (m != null) v.getLookControl().setLookAt(m, 30f, 30f);
+		if (s.idx >= s.caminho.size()) { frear(barco, 0.3); return; } // chegou: espera atracado
+		if (remar(level, v, barco, s, r) && !planejarDoca(level, barco, s) && m != null)
+			planejar(level, barco, s, r, m.position());
 	}
 
 	// ---------- vida: falas, olhar, animações ----------
@@ -929,7 +1049,7 @@ public final class Pescador {
 		}
 		if (v.getVehicle() != novo) { v.stopRiding(); v.startRiding(novo, true, true); }
 		if (galinha != null && galinha.getVehicle() != novo) { galinha.stopRiding(); galinha.startRiding(novo, true, true); }
-		chapeu(level, v);
+		profissao(level, v);
 		Estado s = estados.get(v.getUUID());
 		if (s != null) { largarBoia(s); s.modo = Modo.NAVEGANDO; s.caminho = List.of(); s.idx = 0; }
 		return "§6Márcio no barco com baú" + (galinha == null ? " §7(sem galinha \"Pinto\" por perto)" : " com o Pinto em cima do baú");
@@ -945,10 +1065,10 @@ public final class Pescador {
 	 * Escolhe um destino aleatório alcançável pela água e vai até ele pelo meio do riacho:
 	 * busca com custo (Dijkstra) em que andar colado na margem custa mais.
 	 */
-	private static void planejar(ServerLevel level, AbstractBoat barco, Estado s, RandomSource r) {
+	private static void planejar(ServerLevel level, AbstractBoat barco, Estado s, RandomSource r, Vec3 longeDe) {
 		s.caminho = List.of(); s.idx = 0;
-		BlockPos ini = BlockPos.containing(barco.getX(), barco.getY() - 0.3, barco.getZ());
-		if (!agua(level, ini)) return;
+		BlockPos ini = partida(level, barco);
+		if (ini == null) return;
 		Map<BlockPos, BlockPos> pai = new HashMap<>();
 		Map<BlockPos, Integer> passos = new HashMap<>();
 		Map<BlockPos, Double> custo = new HashMap<>();
@@ -969,10 +1089,20 @@ public final class Pescador {
 				}
 			}
 		}
-		if (candidatos.isEmpty()) return;
-		// prefere pontos com água dos lados (meio do riacho)
-		candidatos.sort(Comparator.comparingInt(p -> -largura(level, p)));
-		BlockPos alvo = candidatos.get(r.nextInt(Math.max(1, candidatos.size() / 2)));
+		if (candidatos.isEmpty()) {
+			// talvez os encalhes recentes fecharam o canal: esquece e tenta de novo uma vez
+			if (!s.evitar.isEmpty()) { s.evitar.clear(); planejar(level, barco, s, r, longeDe); }
+			return;
+		}
+		BlockPos alvo;
+		if (longeDe != null) { // fugindo: o ponto mais longe do perigo
+			candidatos.sort(Comparator.comparingDouble(p -> -p.distToCenterSqr(longeDe)));
+			alvo = candidatos.get(0);
+		} else {
+			// prefere pontos com água dos lados (meio do riacho)
+			candidatos.sort(Comparator.comparingInt(p -> -largura(level, p)));
+			alvo = candidatos.get(r.nextInt(Math.max(1, candidatos.size() / 2)));
+		}
 		s.caminho = caminho(pai, ini, alvo);
 	}
 

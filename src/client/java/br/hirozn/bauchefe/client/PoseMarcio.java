@@ -147,11 +147,12 @@ public final class PoseMarcio {
 			case AnimMarcio.CARINHO -> {
 				// vira o tronco e a cabeça para trás (o Pinto fica no baú), estica o braço esquerdo
 				// para cima e para trás e afaga a cabeça dele; as pernas continuam para a frente
-				float giro = 0.9f * w;
+				// gira para a esquerda (o lado do braço esquerdo vai para trás, perto do Pinto)
+				float giro = -0.9f * w;
 				root.yRot += giro;
 				pernaD.yRot -= giro;
 				pernaE.yRot -= giro;
-				head.yRot = Mth.lerp(w, head.yRot, 0.8f);
+				head.yRot = Mth.lerp(w, head.yRot, -0.8f);
 				head.xRot = Mth.lerp(w, head.xRot, 0.15f);
 				misturar(esq, 2.0f + 0.18f * Mth.sin(t * 0.9f), -0.2f, -0.35f + 0.08f * Mth.sin(t * 0.9f + 1f), w);
 				body.xRot = Mth.lerp(w, body.xRot, -0.08f);
