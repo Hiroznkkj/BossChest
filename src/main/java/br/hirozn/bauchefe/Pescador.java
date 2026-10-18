@@ -76,6 +76,7 @@ public final class Pescador {
 		Vec3 olharPonto;
 		final Map<UUID, Integer> cumprimentou = new HashMap<>();
 		UUID ladrao;
+		boolean bebado; // de vez em quando acorda bêbado: fala bobagem e rema torto o dia todo
 	}
 
 	private static final Map<UUID, Estado> estados = new HashMap<>();
@@ -204,6 +205,7 @@ public final class Pescador {
 
 		// vira suavemente na direção do próximo ponto e rema para a frente
 		float querido = (float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG);
+		if (s.bebado) querido += 35f * Mth.sin(relogio * 0.04f); // rema em zigue-zague
 		float yaw = barco.getYRot() + Mth.clamp(Mth.wrapDegrees(querido - barco.getYRot()), -5f, 5f);
 		barco.setYRot(yaw);
 		barco.setYHeadRot(yaw);
@@ -357,6 +359,7 @@ public final class Pescador {
 
 	private static void noturno(ServerLevel level, Villager v, AbstractBoat barco, Estado s) {
 		if (s.modo == Modo.NAVEGANDO) {
+			s.bebado = false;
 			s.modo = planejarDoca(level, barco, s) ? Modo.INDO_DOCA : Modo.PARADO_NOITE;
 			falar(level, v, s, s.modo == Modo.INDO_DOCA ? Falas.Tipo.NOITE : Falas.Tipo.SEM_DOCA, null, false);
 		}
@@ -384,7 +387,10 @@ public final class Pescador {
 		if (s.modo == Modo.EM_TERRA) {
 			if (!noite(level) && !v.isSleeping()) {
 				s.modo = Modo.VOLTANDO; s.voltando = 0;
-				falar(level, v, s, Falas.Tipo.ACORDOU, null, false);
+				// mais ou menos 1 dia em 8 acorda bêbado; às vezes conta o sonho
+				RandomSource r = level.getRandom();
+				s.bebado = r.nextFloat() < 0.12f;
+				falar(level, v, s, s.bebado ? Falas.Tipo.BEBADO : r.nextFloat() < 0.35f ? Falas.Tipo.SONHO : Falas.Tipo.ACORDOU, null, true);
 			}
 			return true;
 		}
@@ -502,8 +508,12 @@ public final class Pescador {
 			}
 			return;
 		}
-		if (relogio % 200 == 0 && r.nextFloat() < 0.3f && v.getVehicle() instanceof AbstractBoat b && b.hasPassenger(Pescador::ehPinto))
-			falar(level, v, s, Falas.Tipo.PINTO, null, false);
+		// de vez em quando: piada, brincadeira com o Pinto ou bobagem de bêbado
+		if (relogio % 200 == 0 && r.nextFloat() < 0.3f && v.getVehicle() instanceof AbstractBoat b) {
+			Falas.Tipo tipo = s.bebado && r.nextBoolean() ? Falas.Tipo.BEBADO
+					: b.hasPassenger(Pescador::ehPinto) && r.nextFloat() < 0.4f ? Falas.Tipo.PINTO : Falas.Tipo.PIADA;
+			falar(level, v, s, tipo, null, false);
+		}
 	}
 
 	/**
@@ -513,7 +523,7 @@ public final class Pescador {
 	private static boolean falar(ServerLevel level, Villager v, Estado s, Falas.Tipo tipo, String nome, boolean forcar) {
 		if (!forcar && relogio < s.proximaFala) return false;
 		if (level.getNearestPlayer(v, 32) == null) return false;
-		Pacotes.Fala fala = new Pacotes.Fala(v.getId(), Falas.frase(tipo, level.getRandom(), nome));
+		Pacotes.Fala fala = new Pacotes.Fala(v.getId(), Falas.balao(Falas.frase(tipo, level.getRandom(), nome)));
 		for (ServerPlayer p : PlayerLookup.tracking(v)) ServerPlayNetworking.send(p, fala);
 		s.proximaFala = relogio + 800 + level.getRandom().nextInt(1000);
 		return true;
