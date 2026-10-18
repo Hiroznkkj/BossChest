@@ -43,7 +43,6 @@ public final class PoseMarcio {
 		if (d.sentado) levantar(d, age, r, root, head, body, dir, esq, pernaD, pernaE);
 
 		emPe(d, age, root, head, body, esq, pernaD, pernaE);
-		nadar(d, age, root, head, dir, esq, pernaD, pernaE);
 		especial(d, root, head, body, dir, esq, pernaD, pernaE);
 	}
 
@@ -97,22 +96,6 @@ public final class PoseMarcio {
 		}
 	}
 
-	/** Nado de cachorrinho: braços em círculo alternados, pernas batendo, cabeça para fora da água. */
-	private static void nadar(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq,
-	                          ModelPart pernaD, ModelPart pernaE) {
-		float n = d.nado;
-		if (n <= 0) return;
-		float c = age * 0.33f;
-		dir.xRot = Mth.lerp(n, dir.xRot, -2.3f + 0.9f * Mth.sin(c));
-		dir.zRot = Mth.lerp(n, dir.zRot, 0.25f + 0.2f * Mth.cos(c));
-		esq.xRot = Mth.lerp(n, esq.xRot, -2.3f + 0.9f * Mth.sin(c + Mth.PI));
-		esq.zRot = Mth.lerp(n, esq.zRot, -0.25f - 0.2f * Mth.cos(c + Mth.PI));
-		pernaD.xRot = Mth.lerp(n, pernaD.xRot, 0.5f * Mth.sin(age * 0.5f));
-		pernaE.xRot = Mth.lerp(n, pernaE.xRot, 0.5f * Mth.sin(age * 0.5f + Mth.PI));
-		head.xRot = Mth.lerp(n, head.xRot, -0.35f);
-		root.y += n * 1.2f * Mth.sin(c * 2f); // sobe e desce com as braçadas
-	}
-
 	private static void especial(DadosMarcio d, ModelPart root, ModelPart head, ModelPart body, ModelPart dir, ModelPart esq,
 	                             ModelPart pernaD, ModelPart pernaE) {
 		float w = AnimMarcio.peso(d.anim, d.animTempo);
@@ -147,11 +130,12 @@ public final class PoseMarcio {
 			case AnimMarcio.CARINHO -> {
 				// vira o tronco e a cabeça para trás (o Pinto fica no baú), estica o braço esquerdo
 				// para cima e para trás e afaga a cabeça dele; as pernas continuam para a frente
-				float giro = 0.9f * w;
+				// gira para a esquerda (o lado do braço esquerdo vai para trás, perto do Pinto)
+				float giro = -0.9f * w;
 				root.yRot += giro;
 				pernaD.yRot -= giro;
 				pernaE.yRot -= giro;
-				head.yRot = Mth.lerp(w, head.yRot, 0.8f);
+				head.yRot = Mth.lerp(w, head.yRot, -0.8f);
 				head.xRot = Mth.lerp(w, head.xRot, 0.15f);
 				misturar(esq, 2.0f + 0.18f * Mth.sin(t * 0.9f), -0.2f, -0.35f + 0.08f * Mth.sin(t * 0.9f + 1f), w);
 				body.xRot = Mth.lerp(w, body.xRot, -0.08f);

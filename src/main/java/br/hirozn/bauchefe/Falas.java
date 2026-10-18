@@ -10,7 +10,7 @@ import java.util.Locale;
  * e o balão mostra o texto sem as tags (balao). %s é o nome do jogador. Lista completa em FALAS.md.
  */
 public final class Falas {
-	public enum Tipo { PEIXE, RARO, VAZIO, NOITE, SEM_DOCA, ACORDOU, SONHO, BEBADO, OI, PINTO, PIADA, CANCAO, CARINHO, BOCEJO, ROUBO, DEVOLVEU }
+	public enum Tipo { PEIXE, RARO, VAZIO, NOITE, SEM_DOCA, ACORDOU, SONHO, BEBADO, OI, PINTO, PIADA, CANCAO, CARINHO, BOCEJO, ROUBO, DEVOLVEU, MEDO, BUSCA, CORDA }
 
 	/** Uma fala: o texto (ou roteiro) e o som em assets/bauchefe/sounds/marcio (null se ainda não tem áudio). */
 	public record Linha(String texto, String som) {}
@@ -106,6 +106,20 @@ public final class Falas {
 			new Linha("Pinto, você tá bem? (Ele te fez alguma coisa?)", "devolveu_3"),
 			new Linha("Valeu... (da próxima eu chamo o golem)", "devolveu_4")};
 
+	static final Linha[] MEDO = { // ainda sem áudio
+			new Linha("[gasping] Bicho! Rema, Pinto, rema!", null),
+			new Linha("[panting] Sai pra lá, assombração!", null),
+			new Linha("[angry] Hoje não, zumbi!", null),
+			new Linha("[gasping] Vou pra doca, que aqui tá perigoso!", null)};
+
+	static final Linha[] BUSCA = { // ainda sem áudio
+			new Linha("[sighing] Cadê meu barco?", null),
+			new Linha("Peraí, Pinto, tô indo!", null),
+			new Linha("[panting] Barquinho, volta aqui!", null)};
+	static final Linha[] CORDA = { // ainda sem áudio
+			new Linha("[panting] Segura essa corda, barquinho!", null),
+			new Linha("[sharp exhale] Vem cá, sobe, sobe!", null)};
+
 	private Falas() {}
 
 	static Linha[] lista(Tipo tipo, String nome, RandomSource r) {
@@ -131,6 +145,9 @@ public final class Falas {
 			case BOCEJO -> BOCEJO;
 			case ROUBO -> ROUBO;
 			case DEVOLVEU -> DEVOLVEU;
+			case MEDO -> MEDO;
+			case BUSCA -> BUSCA;
+			case CORDA -> CORDA;
 		};
 	}
 

@@ -17,6 +17,7 @@ import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,6 +37,7 @@ public final class MarcioCliente {
 	private static final Int2ObjectMap<float[]> nado = new Int2ObjectOpenHashMap<>(); // {peso, último tempo}
 	private static final Int2ObjectMap<float[]> piscadas = new Int2ObjectOpenHashMap<>(); // {próxima piscada}
 	private static final net.minecraft.util.RandomSource rnd = net.minecraft.util.RandomSource.create();
+	private static final Int2ObjectMap<double[]> saltos = new Int2ObjectOpenHashMap<>(); // {x,y,z,t, desvio x,y,z, início}
 	private static final Int2ObjectMap<float[]> assento = new Int2ObjectOpenHashMap<>(); // {1 no barco, tempo da troca}
 	private static final Int2ObjectMap<MarcioSom[]> sons = new Int2ObjectOpenHashMap<>();
 
@@ -159,6 +161,27 @@ public final class MarcioCliente {
 		float aperta = d.fase == AnimPesca.LUTA ? 0.45f * AnimPesca.luta(d.tempo) : 0f; // força na briga com o peixe
 		d.palpebra = Math.max(pisca, aperta);
 		d.distancia = (float) Math.sqrt(st.distanceToCameraSq);
+
+		// salto: se a posição mudou de uma vez (> 0,9 bloco num tick), o corpo sai do lugar antigo e chega
+		// ao novo em 0,5 s, num arco (embarcar, descer na doca, testes); continua um salto em andamento
+		Vec3 pos = v.getPosition(partial);
+		double[] sl = saltos.get(id);
+		if (sl == null) saltos.put(id, sl = new double[]{pos.x, pos.y, pos.z, t, 0, 0, 0, -1000});
+		double ox = 0, oy = 0, oz = 0;
+		float us = (float) ((t - sl[7]) / 10.0);
+		if (us < 1) {
+			float e = 1f - AnimPesca.inOutSine(us);
+			ox = sl[4] * e; oy = sl[5] * e; oz = sl[6] * e;
+		}
+		if (t - sl[3] < 3 && pos.distanceToSqr(sl[0], sl[1], sl[2]) > 0.9 * 0.9) {
+			sl[4] = sl[0] - pos.x + ox; sl[5] = sl[1] - pos.y + oy; sl[6] = sl[2] - pos.z + oz;
+			sl[7] = t;
+			ox = sl[4]; oy = sl[5]; oz = sl[6];
+			us = 0;
+		}
+		sl[0] = pos.x; sl[1] = pos.y; sl[2] = pos.z; sl[3] = t;
+		double arco = us < 1 ? Math.min(0.6, Math.sqrt(sl[4] * sl[4] + sl[6] * sl[6]) * 0.25) * Mth.sin(Mth.PI * us) : 0;
+		d.saltoX = ox; d.saltoY = oy + arco; d.saltoZ = oz;
 
 		// nado: entra e sai aos poucos (~0,4 s), calculado pelo tempo que passou desde o último quadro
 		float[] n = nado.computeIfAbsent(id, k -> new float[]{0f, t});
