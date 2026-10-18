@@ -41,9 +41,20 @@ public final class MarcioCliente {
 
 	private MarcioCliente() {}
 
+	private static Object mundo;
+	private static long base;
+
+	/**
+	 * Ticks desde que o cliente entrou neste mundo. Não usa o tempo total do mundo direto: num mundo antigo
+	 * ele passa de dezenas de milhões e, somado ao partialTick num float, perde a fração (a animação andava
+	 * aos saltos, uns 5 quadros por segundo).
+	 */
 	private static long agora() {
 		Minecraft mc = Minecraft.getInstance();
-		return mc.level == null ? 0 : mc.level.getGameTime();
+		if (mc.level == null) return 0;
+		long g = mc.level.getGameTime();
+		if (mc.level != mundo || g < base) { mundo = mc.level; base = g; }
+		return g - base;
 	}
 
 	public static void fala(Pacotes.Fala p) {
@@ -86,12 +97,13 @@ public final class MarcioCliente {
 	public static void anim(Pacotes.Anim p) {
 		long t = agora();
 		anims.put(p.villager(), new Anim(p.anim(), t));
+		long mundoT = Minecraft.getInstance().level == null ? 0 : Minecraft.getInstance().level.getGameTime(); // Asas usa o tempo do mundo
 		if (p.anim() == AnimMarcio.CARINHO) { // o Pinto bate as asas no meio do carinho
 			Minecraft mc = Minecraft.getInstance();
 			Entity v = mc.level == null ? null : mc.level.getEntity(p.villager());
 			if (v != null && v.getVehicle() != null)
 				for (Entity e : v.getVehicle().getPassengers())
-					if (Pescador.ehPinto(e)) { Asas.bater(e.getId(), t + 40); Asas.carinho(e.getId(), t); }
+					if (Pescador.ehPinto(e)) { Asas.bater(e.getId(), mundoT + 40); Asas.carinho(e.getId(), mundoT); }
 		}
 	}
 
