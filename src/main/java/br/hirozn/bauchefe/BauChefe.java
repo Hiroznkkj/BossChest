@@ -74,6 +74,12 @@ public class BauChefe implements ModInitializer {
 
 		// /bauchefe abrir: mesmo efeito do Shift+V (útil sem teclado ou em comandos)
 		CommandRegistrationCallback.EVENT.register((d, reg, env) -> d.register(Commands.literal("bauchefe")
+				// /bauchefe marcio: barco com baú para o pescador mais próximo (só operador)
+				.then(Commands.literal("marcio").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(c -> {
+					String msg = Pescador.trocarBarco(c.getSource().getLevel(), c.getSource().getPosition());
+					c.getSource().sendSystemMessage(Component.literal(msg));
+					return msg.startsWith("§6") ? 1 : 0;
+				}))
 				.then(Commands.literal("abrir").executes(c -> { responder(c.getSource().getPlayerOrException(), ""); return 1; }))
 				.then(Commands.literal("guardar").executes(c -> {
 					ServerPlayer pl = c.getSource().getPlayerOrException();

@@ -10,11 +10,16 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.animal.chicken.Chicken;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
+import net.minecraft.world.entity.vehicle.boat.AbstractChestBoat;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
@@ -63,8 +68,77 @@ public final class Pescador {
 		});
 	}
 
-	static boolean ehPescador(Villager v) {
-		return v.hasCustomName() && v.getCustomName().getString().toLowerCase(Locale.ROOT).contains("pescador");
+	public static boolean ehPescador(Entity e) {
+		return e instanceof Villager && e.hasCustomName() && e.getCustomName().getString().toLowerCase(Locale.ROOT).contains("pescador");
+	}
+
+	/** Barco com baú pilotado pelo pescador: aceita a galinha como segundo passageiro, em cima do baú. */
+	public static boolean barcoDoMarcio(AbstractBoat b) {
+		return b instanceof AbstractChestBoat && !b.getPassengers().isEmpty() && ehPescador(b.getPassengers().get(0));
+	}
+
+	static boolean ehPinto(Entity e) {
+		return e instanceof Chicken && e.hasCustomName() && e.getCustomName().getString().toLowerCase(Locale.ROOT).contains("pinto");
+	}
+
+	/** /bauchefe marcio: troca o barco do pescador mais próximo por um barco com baú e monta ele e a galinha. */
+	public static String trocarBarco(ServerLevel level, Vec3 origem) {
+		Villager v = null;
+		double best = 64 * 64;
+		for (Villager c : level.getEntities(EntityTypes.VILLAGER, Pescador::ehPescador)) {
+			double d = c.distanceToSqr(origem);
+			if (d < best) { best = d; v = c; }
+		}
+		if (v == null) return "§cNenhum pescador num raio de 64 blocos";
+		if (!(v.getVehicle() instanceof AbstractBoat barco)) return "§cO pescador não está num barco";
+
+		Chicken galinha = null;
+		for (Entity p : barco.getPassengers()) if (p instanceof Chicken c) galinha = c;
+		if (galinha == null) {
+			best = 24 * 24;
+			for (Chicken c : level.getEntities(EntityTypes.CHICKEN, v.getBoundingBox().inflate(24), Pescador::ehPinto)) {
+				double d = c.distanceToSqr(v);
+				if (d < best) { best = d; galinha = c; }
+			}
+		}
+
+		AbstractChestBoat novo;
+		if (barco instanceof AbstractChestBoat jaTem) novo = jaTem;
+		else {
+			// mesma madeira: oak_boat -> oak_chest_boat, bamboo_raft -> bamboo_chest_raft
+			Identifier tipo = BuiltInRegistries.ENTITY_TYPE.getKey(barco.getType());
+			String path = tipo.getPath().replace("_boat", "_chest_boat").replace("_raft", "_chest_raft");
+			Entity e = BuiltInRegistries.ENTITY_TYPE.getOptional(Identifier.fromNamespaceAndPath(tipo.getNamespace(), path))
+					.orElse(EntityTypes.OAK_CHEST_BOAT).create(level, EntitySpawnReason.COMMAND);
+			if (!(e instanceof AbstractChestBoat cb)) return "§cNão deu para criar o barco com baú";
+			novo = cb;
+			novo.snapTo(barco.getX(), barco.getY(), barco.getZ(), barco.getYRot(), 0);
+			barco.ejectPassengers();
+			barco.discard();
+			level.addFreshEntity(novo);
+		}
+		if (v.getVehicle() != novo) { v.stopRiding(); v.startRiding(novo, true, true); }
+		if (galinha != null && galinha.getVehicle() != novo) { galinha.stopRiding(); galinha.startRiding(novo, true, true); }
+		return "§6Márcio no barco com baú" + (galinha == null ? " §7(sem galinha \"Pinto\" por perto)" : " com o Pinto em cima do baú");
+	}
+
+	/** Guarda o peixe no baú do barco; o que não couber se perde. */
+	private static void guardar(AbstractChestBoat bau, ItemStack st) {
+		for (int i = 0; i < bau.getContainerSize() && !st.isEmpty(); i++) {
+			ItemStack s = bau.getItem(i);
+			if (!s.isEmpty() && ItemStack.isSameItemSameComponents(s, st) && s.getCount() < s.getMaxStackSize()) {
+				int n = Math.min(st.getCount(), s.getMaxStackSize() - s.getCount());
+				s.grow(n); st.shrink(n);
+			}
+		}
+		for (int i = 0; i < bau.getContainerSize() && !st.isEmpty(); i++)
+			if (bau.getItem(i).isEmpty()) { bau.setItem(i, st.copy()); st.setCount(0); }
+		bau.setChanged();
+	}
+
+	private static ItemStack peixeAleatorio(RandomSource r) {
+		float f = r.nextFloat(); // chances da pesca vanilla
+		return new ItemStack(f < 0.60f ? Items.COD : f < 0.85f ? Items.SALMON : f < 0.98f ? Items.PUFFERFISH : Items.TROPICAL_FISH);
 	}
 
 	private static void procurar(ServerLevel level) {
@@ -142,7 +216,8 @@ public final class Pescador {
 			level.sendParticles(ParticleTypes.SPLASH, b.x, b.y, b.z, 12, 0.2, 0, 0.2, 0.1);
 			level.sendParticles(ParticleTypes.BUBBLE, b.x, b.y - 0.3, b.z, 8, 0.2, 0.1, 0.2, 0.1);
 			if (r.nextFloat() < 0.6f) { // fisgou: o peixe salta até o barco
-				ItemStack peixe = new ItemStack(r.nextFloat() < 0.7f ? Items.COD : Items.SALMON);
+				ItemStack peixe = peixeAleatorio(r);
+				if (barco instanceof AbstractChestBoat bau) guardar(bau, peixe.copy());
 				ItemEntity ie = new ItemEntity(level, b.x, b.y + 0.2, b.z, peixe);
 				Vec3 d = barco.position().add(0, 1.2, 0).subtract(b);
 				ie.setDeltaMovement(d.x * 0.1, d.y * 0.1 + Math.sqrt(d.length()) * 0.08, d.z * 0.1);
