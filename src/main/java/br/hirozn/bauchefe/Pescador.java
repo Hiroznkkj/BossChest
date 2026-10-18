@@ -207,18 +207,28 @@ public final class Pescador {
 		Vec3 pos = barco.position();
 		if (relogio - s.remouEm > 1) s.ultimaPos = pos; // voltou a remar depois de parar: não é encalhe
 		s.remouEm = relogio;
-		// passa pelos pontos que já ficaram para trás; numa curva só passa bem no meio do bloco
+		// chegou perto do destino: pronto
+		BlockPos fim = s.caminho.get(s.caminho.size() - 1);
+		if (Math.pow(fim.getX() + 0.5 - pos.x, 2) + Math.pow(fim.getZ() + 0.5 - pos.z, 2) < 1.2) {
+			s.idx = s.caminho.size();
+			return false;
+		}
+		// se já está mais perto de um ponto adiante, pula para ele
+		int perto = s.idx;
+		double menor = Double.MAX_VALUE;
+		for (int k = s.idx; k < Math.min(s.caminho.size(), s.idx + 6); k++) {
+			BlockPos c = s.caminho.get(k);
+			double d = Math.pow(c.getX() + 0.5 - pos.x, 2) + Math.pow(c.getZ() + 0.5 - pos.z, 2);
+			if (d < menor) { menor = d; perto = k; }
+		}
+		s.idx = perto;
+		// passa pelos pontos que já ficaram para trás; numa curva só passa perto do meio do bloco
 		// (a caixa do barco não gira, então ele precisa estar centrado para caber no canal novo)
 		while (s.idx < s.caminho.size() - 1) {
 			BlockPos c = s.caminho.get(s.idx);
-			double raio = curva(s.caminho, s.idx) ? 0.45 : 1.4;
+			double raio = curva(s.caminho, s.idx) ? 0.7 : 1.4;
 			if (Math.pow(c.getX() + 0.5 - pos.x, 2) + Math.pow(c.getZ() + 0.5 - pos.z, 2) >= raio * raio) break;
 			s.idx++;
-		}
-		BlockPos fim = s.caminho.get(s.caminho.size() - 1);
-		if (s.idx == s.caminho.size() - 1 && Math.pow(fim.getX() + 0.5 - pos.x, 2) + Math.pow(fim.getZ() + 0.5 - pos.z, 2) < 1.2) {
-			s.idx = s.caminho.size();
-			return false;
 		}
 		BlockPos alvo = s.caminho.get(s.idx);
 		for (int k = s.idx + 1; k < s.caminho.size(); k++) {
