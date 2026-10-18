@@ -20,7 +20,7 @@ public abstract class ChickenRendererMixin {
 		EstadoPinto ep = (EstadoPinto) st;
 		boolean sentado = Pescador.ehPinto(c) && c.isPassenger() && !c.isBaby();
 		long desde = Asas.carinhoDesde(c.getId());
-		float t = desde == 0 ? -1f : c.level().getGameTime() - desde + partial;
+		float t = desde == 0 ? -1f : (c.level().getGameTime() - desde) + partial; // subtrai em long antes de virar float
 		ep.bauchefe$set(sentado, t >= 0 && t < AnimMarcio.duracao(AnimMarcio.CARINHO) ? t : -1f, AnimMarcio.fase(c.getId()));
 	}
 }
