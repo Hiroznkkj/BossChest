@@ -81,7 +81,8 @@ public class Boia extends Entity {
 	public void tick() {
 		super.tick();
 		if (!level().isClientSide()) {
-			if (getDono() == null || tickCount > 6000) discard(); // segurança: dono sumiu
+			// segurança: dono sumiu, a pesca dela acabou sem apagar, ou demorou demais
+			if (getDono() == null || (tickCount > 40 && !Pescador.boiaAtiva(this)) || tickCount > 2400) discard();
 			return;
 		}
 		LivingEntity dono = getDono();

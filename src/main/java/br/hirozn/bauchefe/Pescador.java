@@ -22,6 +22,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.chicken.Chicken;
@@ -55,7 +56,9 @@ public final class Pescador {
 	private static final int LONGE_DE_CASA = 48, BUSCA_MAX = 900;
 	private static final double VELOCIDADE = 0.07;
 
-	private enum Modo { NAVEGANDO, INDO_DOCA, PARADO_NOITE, EM_TERRA, VOLTANDO, PERSEGUINDO, FUGINDO }
+	private enum Modo { NAVEGANDO, INDO_DOCA, PARADO_NOITE, EM_TERRA, VOLTANDO, PERSEGUINDO, FUGINDO, BUSCANDO }
+	/** Até onde ele procura o barco quando fica sem ele. */
+	private static final int RAIO_BARCO = 25;
 
 	/** Marca do barco do Márcio (tag da entidade) e do dono dele. */
 	public static final String TAG_BARCO = "bauchefe.barco_do_marcio", TAG_DONO = "bauchefe.dono.";
@@ -119,10 +122,13 @@ public final class Pescador {
 				if (s.remontarEm > 0) { if (relogio >= s.remontarEm) remontar(level, v, s); continue; } // teste fora do barco
 				if (s.demo != null) demo(level, v, s);
 				if (s.modo == Modo.PERSEGUINDO) { perseguir(level, v, s); continue; }
+				if (s.modo == Modo.BUSCANDO) { if (!buscar(level, v, s)) it.remove(); continue; }
 				if (s.modo == Modo.EM_TERRA || s.modo == Modo.VOLTANDO) { if (!emTerra(level, v, s)) it.remove(); continue; }
 				if (!(v.getVehicle() instanceof AbstractBoat barco)) {
 					largarBoia(s);
 					if (roubado(level, v, s)) continue;
+					// caiu do barco ou o barco foi embora: vai buscar (de dia)
+					if (!noite(level) && !v.isSleeping()) { s.modo = Modo.BUSCANDO; s.voltando = 0; falar(level, v, s, Falas.Tipo.BUSCA, null, false); continue; }
 					if (relogio % 100 == 0) it.remove();
 					continue;
 				}
@@ -130,6 +136,13 @@ public final class Pescador {
 				tick(level, v, barco, s);
 			}
 		});
+	}
+
+	/** A boia pertence a uma pesca em andamento? (boia órfã se apaga sozinha) */
+	public static boolean boiaAtiva(Boia b) {
+		LivingEntity dono = b.getDono();
+		Estado s = dono == null ? null : estados.get(dono.getUUID());
+		return s != null && s.boia == b;
 	}
 
 	public static boolean ehPescador(Entity e) {
@@ -162,8 +175,8 @@ public final class Pescador {
 				estados.put(v.getUUID(), s);
 			} else if (!noite && !v.isPassenger()) {
 				// em terra de dia (ex.: servidor reiniciou à noite): volta para um barco com baú vazio por perto
-				AbstractChestBoat b = barcoDele(level, v, 64);
-				if (b == null) b = barcoLivre(level, v.position(), 24);
+				AbstractChestBoat b = barcoDele(level, v, RAIO_BARCO);
+				if (b == null) b = barcoLivre(level, v.position(), RAIO_BARCO);
 				if (b == null) continue;
 				Estado s = new Estado();
 				s.casa = b.blockPosition();
@@ -728,6 +741,49 @@ public final class Pescador {
 		return false;
 	}
 
+	// ---------- buscar o barco ----------
+
+	/**
+	 * Sem barco: procura o dele (ou um livre) a até RAIO_BARCO blocos e vai até ele, andando ou nadando.
+	 * Se o barco estiver afundado, amarra uma corda (lead) nele e nada para longe puxando até ele subir;
+	 * com o barco boiando e perto, solta a corda e embarca. Devolve false quando desiste.
+	 */
+	private static boolean buscar(ServerLevel level, Villager v, Estado s) {
+		segurarVara(v);
+		s.voltando++;
+		if (v.isPassenger()) { s.modo = Modo.NAVEGANDO; return true; }
+		if (roubado(level, v, s)) return true;
+		AbstractBoat barco = s.barco != null && level.getEntity(s.barco) instanceof AbstractBoat b && !b.hasPassenger(Pescador::ehPescador) ? b : null;
+		if (barco == null || barco.distanceToSqr(v) > RAIO_BARCO * RAIO_BARCO) {
+			barco = barcoDele(level, v, RAIO_BARCO);
+			if (barco == null) barco = barcoLivre(level, v.position(), RAIO_BARCO);
+			if (barco != null) s.barco = barco.getUUID();
+		}
+		if (barco == null) return s.voltando <= 1200; // procura por 1 min
+		boolean fundo = barco.isUnderWater();
+		boolean puxando = barco.isLeashed() && barco.getLeashHolder() == v;
+		double d = v.distanceToSqr(barco);
+		if (!fundo && d < 4.0 * 4.0) { // barco boiando e perto: sobe
+			if (puxando) barco.removeLeash();
+			embarcar(level, v, barco, s);
+			return true;
+		}
+		if (fundo && !puxando && Math.pow(barco.getX() - v.getX(), 2) + Math.pow(barco.getZ() - v.getZ(), 2) < 3 * 3 && d < 10 * 10) {
+			barco.setLeashedTo(v, true); // corda no barco afundado
+			falar(level, v, s, Falas.Tipo.CORDA, null, false);
+		}
+		if (s.voltando % 10 == 1) {
+			if (puxando) {
+				// nada para longe do barco, puxando a corda, até ele subir
+				Vec3 sai = v.position().subtract(barco.position()).multiply(1, 0, 1);
+				sai = sai.lengthSqr() < 0.01 ? new Vec3(1, 0, 0) : sai.normalize();
+				v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(v.position().add(sai.scale(4)), 0.7f, 0));
+			} else v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(barco, 0.75f, 1));
+		}
+		v.getLookControl().setLookAt(barco, 30f, 30f);
+		return s.voltando <= 3600; // desiste depois de 3 min
+	}
+
 	// ---------- fuga ----------
 
 	/** Monstro mais perto do barco, a até 'raio' blocos, ou null. */
@@ -955,7 +1011,8 @@ public final class Pescador {
 
 	/** "tudo": quando ele está à toa no barco, roda o próximo teste da fila. */
 	private static void demo(ServerLevel level, Villager v, Estado s) {
-		s.timer = Math.max(s.timer, 100); // não pesca nem faz animação sozinho no meio do teste
+		// não pesca nem faz animação sozinho no meio do teste (o timer também conta a mordida: só mexe sem boia)
+		if (s.boia == null) s.timer = Math.max(s.timer, 100);
 		s.proximaAnim = Math.max(s.proximaAnim, relogio + 600);
 		if (!(v.getVehicle() instanceof AbstractBoat barco) || s.boia != null || relogio < s.animFim || relogio < s.demoProx) return;
 		String qual = s.demo.poll();

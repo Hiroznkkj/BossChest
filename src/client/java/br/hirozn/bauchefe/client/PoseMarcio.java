@@ -43,7 +43,6 @@ public final class PoseMarcio {
 		if (d.sentado) levantar(d, age, r, root, head, body, dir, esq, pernaD, pernaE);
 
 		emPe(d, age, root, head, body, esq, pernaD, pernaE);
-		nadar(d, age, root, head, dir, esq, pernaD, pernaE);
 		especial(d, root, head, body, dir, esq, pernaD, pernaE);
 	}
 
@@ -95,22 +94,6 @@ public final class PoseMarcio {
 			esq.yRot = Mth.lerp(luta, esq.yRot, 0.45f);
 			esq.zRot = Mth.lerp(luta, esq.zRot, 0f);
 		}
-	}
-
-	/** Nado de cachorrinho: braços em círculo alternados, pernas batendo, cabeça para fora da água. */
-	private static void nadar(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq,
-	                          ModelPart pernaD, ModelPart pernaE) {
-		float n = d.nado;
-		if (n <= 0) return;
-		float c = age * 0.33f;
-		dir.xRot = Mth.lerp(n, dir.xRot, -2.3f + 0.9f * Mth.sin(c));
-		dir.zRot = Mth.lerp(n, dir.zRot, 0.25f + 0.2f * Mth.cos(c));
-		esq.xRot = Mth.lerp(n, esq.xRot, -2.3f + 0.9f * Mth.sin(c + Mth.PI));
-		esq.zRot = Mth.lerp(n, esq.zRot, -0.25f - 0.2f * Mth.cos(c + Mth.PI));
-		pernaD.xRot = Mth.lerp(n, pernaD.xRot, 0.5f * Mth.sin(age * 0.5f));
-		pernaE.xRot = Mth.lerp(n, pernaE.xRot, 0.5f * Mth.sin(age * 0.5f + Mth.PI));
-		head.xRot = Mth.lerp(n, head.xRot, -0.35f);
-		root.y += n * 1.2f * Mth.sin(c * 2f); // sobe e desce com as braçadas
 	}
 
 	private static void especial(DadosMarcio d, ModelPart root, ModelPart head, ModelPart body, ModelPart dir, ModelPart esq,
