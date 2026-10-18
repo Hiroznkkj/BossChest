@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Barco com baú do Márcio: ele na frente e a galinha sentada em cima do baú. */
+/** Barco com baú do Márcio: ele na frente e a galinha sentada em cima do baú (também quando ela fica sozinha à noite). */
 @Mixin(AbstractBoat.class)
 public abstract class AbstractBoatMixin {
 	// topo do baú: 0.375 do renderer + 9 px do modelo; o baú fica meio bloco atrás do centro
@@ -20,17 +20,18 @@ public abstract class AbstractBoatMixin {
 	@Inject(method = "getPassengerAttachmentPoint", at = @At("RETURN"), cancellable = true)
 	private void bauchefe$galinhaNoBau(Entity passenger, EntityDimensions dim, float scale, CallbackInfoReturnable<Vec3> cir) {
 		AbstractBoat self = (AbstractBoat) (Object) this;
-		if (self.getPassengers().size() < 2 || !Pescador.barcoDoMarcio(self)) return;
+		if (!Pescador.barcoDoMarcio(self)) return;
 		float rad = -self.getYRot() * (float) (Math.PI / 180.0);
-		if (self.getPassengers().indexOf(passenger) == 0) cir.setReturnValue(new Vec3(0, cir.getReturnValue().y, 0.15).yRot(rad));
-		else cir.setReturnValue(new Vec3(0, BAUCHEFE$TOPO_BAU, BAUCHEFE$ATRAS).yRot(rad));
+		if (passenger instanceof Chicken) cir.setReturnValue(new Vec3(0, BAUCHEFE$TOPO_BAU, BAUCHEFE$ATRAS).yRot(rad));
+		else if (self.getPassengers().size() > 1) cir.setReturnValue(new Vec3(0, cir.getReturnValue().y, 0.15).yRot(rad));
 	}
 
-	// só a galinha pode ser o segundo passageiro (o barco puxa bichos que encostam nele)
+	// o segundo passageiro só pode ser a galinha ou o pescador (o barco puxa bichos que encostam nele)
 	@Inject(method = "canAddPassenger", at = @At("HEAD"), cancellable = true)
 	private void bauchefe$soGalinha(Entity passenger, CallbackInfoReturnable<Boolean> cir) {
 		AbstractBoat self = (AbstractBoat) (Object) this;
-		if (self.getPassengers().size() == 1 && Pescador.barcoDoMarcio(self) && !(passenger instanceof Chicken)) cir.setReturnValue(false);
+		if (self.getPassengers().size() == 1 && Pescador.barcoDoMarcio(self) && !(passenger instanceof Chicken || Pescador.ehPescador(passenger)))
+			cir.setReturnValue(false);
 	}
 
 	// a galinha olha para a frente, e não de lado como os bichos no barco cheio

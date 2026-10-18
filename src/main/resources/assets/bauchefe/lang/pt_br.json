@@ -1,6 +1,7 @@
 {
  "block.bauchefe.bau_chefe": "Baú Chefe",
  "container.bauchefe.bau_chefe": "Baú Chefe",
+ "entity.bauchefe.boia": "Boia",
  "key.bauchefe.abrir": "Abrir Baú Chefe (com Shift)",
  "key.category.bauchefe.geral": "Baú Chefe",
  "enchantment.level.11": "XI",

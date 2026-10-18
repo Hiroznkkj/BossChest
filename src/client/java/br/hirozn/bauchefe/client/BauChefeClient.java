@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.renderer.entity.EntityRenderers;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -20,6 +21,7 @@ public class BauChefeClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		KeyMappingHelper.registerKeyMapping(ABRIR);
+		EntityRenderers.register(BauChefe.BOIA, BoiaRenderer::new);
 		Atualizador.iniciar();
 		ClientPlayConnectionEvents.JOIN.register((h, sender, mc) -> {
 			String a = Atualizador.aviso;

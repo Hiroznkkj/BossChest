@@ -12,7 +12,7 @@
 		"main": ["br.hirozn.bauchefe.BauChefe"],
 		"client": ["br.hirozn.bauchefe.client.BauChefeClient"]
 	},
-	"mixins": ["bauchefe.mixins.json", "bauchefe.timber.mixins.json"],
+	"mixins": ["bauchefe.mixins.json", "bauchefe.timber.mixins.json", { "config": "bauchefe.client.mixins.json", "environment": "client" }],
 	"depends": {
 		"fabricloader": ">=0.19.5",
 		"minecraft": "~26.3",

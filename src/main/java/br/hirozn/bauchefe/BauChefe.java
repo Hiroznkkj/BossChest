@@ -25,6 +25,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
@@ -52,6 +54,10 @@ public class BauChefe implements ModInitializer {
 	private static final ResourceKey<Item> ITEM_KEY = ResourceKey.create(Registries.ITEM, id("bau_chefe"));
 	public static final Item BAU_CHEFE_ITEM = Registry.register(BuiltInRegistries.ITEM, ITEM_KEY,
 			new BlockItem(BAU_CHEFE, new Item.Properties().setId(ITEM_KEY).useBlockDescriptionPrefix()));
+	private static final ResourceKey<EntityType<?>> BOIA_KEY = ResourceKey.create(Registries.ENTITY_TYPE, id("boia"));
+	public static final EntityType<Boia> BOIA = Registry.register(BuiltInRegistries.ENTITY_TYPE, BOIA_KEY,
+			EntityType.Builder.<Boia>of(Boia::new, MobCategory.MISC).noLootTable().noSave().noSummon()
+					.sized(0.25f, 0.25f).clientTrackingRange(6).updateInterval(20).build(BOIA_KEY));
 	public static final BlockEntityType<BauChefeBlockEntity> BAU_CHEFE_BE = Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
 			id("bau_chefe"), FabricBlockEntityTypeBuilder.create(BauChefeBlockEntity::new, BAU_CHEFE).build());
 

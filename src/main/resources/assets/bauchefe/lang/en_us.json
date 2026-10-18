@@ -1,6 +1,7 @@
 {
  "block.bauchefe.bau_chefe": "Boss Chest",
  "container.bauchefe.bau_chefe": "Boss Chest",
+ "entity.bauchefe.boia": "Fishing Bobber",
  "key.bauchefe.abrir": "Open Boss Chest (with Shift)",
  "key.category.bauchefe.geral": "Boss Chest",
  "enchantment.level.11": "XI",
