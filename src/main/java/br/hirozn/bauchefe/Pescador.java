@@ -61,7 +61,8 @@ public final class Pescador {
 		List<BlockPos> caminho = List.of();
 		int idx, timer;
 		Vec3 ultimaPos = Vec3.ZERO;
-		int re, remouEm; // ticks de ré para desencalhar; último tick em que remou
+		int re, remouEm, travas; // ticks de ré para desencalhar; último tick em que remou; encalhes seguidos
+		final Map<BlockPos, Integer> evitar = new HashMap<>(); // onde encalhou -> até quando evitar
 		Modo modo = Modo.NAVEGANDO;
 		// pesca
 		Boia boia;
@@ -211,6 +212,7 @@ public final class Pescador {
 		BlockPos fim = s.caminho.get(s.caminho.size() - 1);
 		if (Math.pow(fim.getX() + 0.5 - pos.x, 2) + Math.pow(fim.getZ() + 0.5 - pos.z, 2) < 1.2) {
 			s.idx = s.caminho.size();
+			s.travas = 0;
 			return false;
 		}
 		// se já está mais perto de um ponto adiante, pula para ele
@@ -277,8 +279,43 @@ public final class Pescador {
 		if (relogio % 30 == 0) {
 			boolean preso = pos.distanceToSqr(s.ultimaPos) < 0.04;
 			s.ultimaPos = pos;
-			if (preso) s.re = 15;
+			if (preso) encalhou(level, barco, s, frente);
 		}
+		return false;
+	}
+
+	/**
+	 * Encalhou: marca os blocos logo à frente para o próximo caminho desviar deles por 1 min e dá ré.
+	 * Se encalhar 3 vezes seguidas, empurra o barco de leve para o meio do bloco de água mais livre por perto.
+	 */
+	private static void encalhou(ServerLevel level, AbstractBoat barco, Estado s, Vec3 frente) {
+		s.re = 15;
+		s.travas++;
+		Vec3 pos = barco.position();
+		for (double dist : new double[]{1.0, 1.8}) {
+			BlockPos b = BlockPos.containing(pos.x + frente.x * dist, barco.getY() - 0.3, pos.z + frente.z * dist);
+			s.evitar.put(b, relogio + 1200);
+		}
+		for (int k = s.idx; k < Math.min(s.caminho.size(), s.idx + 2); k++) s.evitar.put(s.caminho.get(k), relogio + 1200);
+		if (s.travas >= 3) {
+			BlockPos aqui = BlockPos.containing(pos.x, barco.getY() - 0.3, pos.z), melhor = null;
+			for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+				BlockPos q = aqui.offset(dx, 0, dz);
+				if (agua(level, q) && (melhor == null || largura(level, q) > largura(level, melhor))) melhor = q;
+			}
+			if (melhor != null) {
+				Vec3 c = Vec3.atBottomCenterOf(melhor);
+				barco.setDeltaMovement((c.x - pos.x) * 0.2, barco.getDeltaMovement().y, (c.z - pos.z) * 0.2);
+			}
+			s.travas = 0;
+		}
+	}
+
+	/** Pode passar por esse bloco de água (não está na lista de encalhes recentes)? */
+	private static boolean livreDeEncalhe(Estado s, BlockPos p) {
+		Integer ate = s.evitar.get(p);
+		if (ate == null) return true;
+		if (ate < relogio) { s.evitar.remove(p); return true; }
 		return false;
 	}
 
@@ -576,7 +613,7 @@ public final class Pescador {
 				return true;
 			}
 			for (BlockPos q : new BlockPos[]{p.north(), p.south(), p.east(), p.west()}) {
-				if (pai.containsKey(q) || q.distManhattan(s.casa) > LONGE_DE_CASA + 16 || !agua(level, q)) continue;
+				if (pai.containsKey(q) || q.distManhattan(s.casa) > LONGE_DE_CASA + 16 || !agua(level, q) || !livreDeEncalhe(s, q)) continue;
 				pai.put(q, p); fila.add(q);
 			}
 		}
@@ -815,7 +852,7 @@ public final class Pescador {
 			int d = passos.get(p);
 			if (d >= 8 && d <= 28) candidatos.add(p);
 			for (BlockPos q : new BlockPos[]{p.north(), p.south(), p.east(), p.west()}) {
-				if (feito.contains(q) || q.distManhattan(s.casa) > LONGE_DE_CASA || !agua(level, q)) continue;
+				if (feito.contains(q) || q.distManhattan(s.casa) > LONGE_DE_CASA || !agua(level, q) || !livreDeEncalhe(s, q)) continue;
 				double c = custo.get(p) + 1 + (9 - largura(level, q)) * 0.7; // margem perto = mais caro
 				if (c < custo.getOrDefault(q, Double.MAX_VALUE)) {
 					custo.put(q, c); passos.put(q, d + 1); pai.put(q, p); fila.add(q);

@@ -34,6 +34,9 @@ public final class MarcioCliente {
 	private static final Int2ObjectMap<Fala> falas = new Int2ObjectOpenHashMap<>();
 	private static final Int2ObjectMap<Anim> anims = new Int2ObjectOpenHashMap<>();
 	private static final Int2ObjectMap<float[]> nado = new Int2ObjectOpenHashMap<>(); // {peso, último tempo}
+	private static final Int2ObjectMap<float[]> piscadas = new Int2ObjectOpenHashMap<>(); // {próxima piscada}
+	private static final net.minecraft.util.RandomSource rnd = net.minecraft.util.RandomSource.create();
+	private static final Int2ObjectMap<float[]> assento = new Int2ObjectOpenHashMap<>(); // {1 no barco, tempo da troca}
 	private static final Int2ObjectMap<MarcioSom[]> sons = new Int2ObjectOpenHashMap<>();
 
 	private MarcioCliente() {}
@@ -97,13 +100,25 @@ public final class MarcioCliente {
 		int id = v.getId();
 		float t = agora() + partial;
 		d.pescador = true;
-		d.sentado = v.isPassenger();
+		d.id = id;
+		d.agora = t;
 		d.rFase = AnimMarcio.fase(id);
 
 		Boia b = Boia.doDono(id);
 		d.fase = b == null ? AnimPesca.NADA : b.faseCliente();
 		d.tempo = b == null ? 0 : b.tempoFase(partial);
 		d.lutou = b != null && b.lutou();
+
+		// sentar/levantar: ao embarcar ou descer, a troca leva 0,7 s; na briga com peixe difícil ele fica de pé
+		boolean noBarco = v.isPassenger();
+		float[] a0 = assento.computeIfAbsent(id, k -> new float[]{noBarco ? 1f : 0f, -1000f});
+		if ((a0[0] > 0.5f) != noBarco) { a0[0] = noBarco ? 1f : 0f; a0[1] = t; }
+		float u = AnimPesca.inOutSine((t - a0[1]) / 14f);
+		float peTroca = noBarco ? 1f - u : u;
+		float peLuta = d.fase == AnimPesca.LUTA ? AnimPesca.inOutSine(d.tempo / 10f)
+				: d.fase == AnimPesca.PUXANDO && d.lutou ? 1f - AnimPesca.inOutSine(d.tempo / AnimPesca.DUR_PUXANDO) : 0f;
+		d.pe = noBarco ? Math.max(peTroca, peLuta) : peTroca;
+		d.sentado = noBarco || d.pe < 1f; // ainda terminando de levantar depois de descer
 
 		Anim a = anims.get(id);
 		if (a != null && t - a.inicio() > AnimMarcio.duracao(a.id())) { anims.remove(id); a = null; }
@@ -119,6 +134,19 @@ public final class MarcioCliente {
 			d.falaSeg = e / 20f;
 			d.falaAlpha = Mth.clamp(Math.min(e / 4f, (f.duracao() - e) / 10f), 0f, 1f); // aparece rápido, some devagar
 		}
+
+		// olhos: vão antes da cabeça para onde ele vai olhar, com mexidinhas; piscam a cada 3 a 6 s
+		float rf = d.rFase, age = st.ageInTicks;
+		float sac = Mth.clamp(Mth.sin(rf + age / 27f) + Mth.sin(rf + age / 16f), -0.15f, 0.15f);
+		d.olhoX = Mth.clamp(-st.yRot / 40f, -1f, 1f) * 0.5f + sac;
+		d.olhoY = Mth.clamp(st.xRot / 45f, -1f, 1f) * 0.3f;
+		float[] p = piscadas.computeIfAbsent(id, k -> new float[]{t + 20 + rnd.nextInt(60)});
+		float up = t - p[0];
+		if (up >= 3) { p[0] = t + (rnd.nextFloat() < 0.2f ? 6 : 60 + rnd.nextInt(60)); up = -1; }
+		float pisca = up < 0 ? 0 : up < 1 ? up : 1 - (up - 1) / 2f; // fecha em 1 tick, abre em 2
+		float aperta = d.fase == AnimPesca.LUTA ? 0.45f * AnimPesca.luta(d.tempo) : 0f; // força na briga com o peixe
+		d.palpebra = Math.max(pisca, aperta);
+		d.distancia = (float) Math.sqrt(st.distanceToCameraSq);
 
 		// nado: entra e sai aos poucos (~0,4 s), calculado pelo tempo que passou desde o último quadro
 		float[] n = nado.computeIfAbsent(id, k -> new float[]{0f, t});

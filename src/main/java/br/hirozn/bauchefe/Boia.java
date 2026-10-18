@@ -96,7 +96,7 @@ public class Boia extends Entity {
 	private void animar(LivingEntity dono) {
 		int t = tickCount - inicioCli;
 		Vec3 agua = position();
-		Vec3 ponta = AnimPesca.ponta(dono, 1f, faseCli, t);
+		Vec3 ponta = AnimPesca.ponta(dono, 1f, faseCli, t, lutou);
 		switch (faseCli) {
 			case AnimPesca.VOO -> {
 				if (t < AnimPesca.SOLTA) { vis = ponta; visivel = false; lancada = null; break; }
