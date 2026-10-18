@@ -14,10 +14,13 @@ import net.minecraft.util.Mth;
 public final class PoseMarcio {
 	private PoseMarcio() {}
 
+	/** Só para o /marcioanim exportar: sem respiração nem balanço, especiais com peso cheio e sem as customizadas. */
+	static boolean exportando;
+
 	public static void aplicar(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart body,
 	                           ModelPart dir, ModelPart esq, ModelPart pernaD, ModelPart pernaE) {
 		float r = d.rFase;
-		float resp = Mth.sin(age * 0.09f + r); // respiração, ~3,5 s
+		float resp = exportando ? 0f : Mth.sin(age * 0.09f + r); // respiração, ~3,5 s
 		boolean pescando = d.fase != AnimPesca.NADA;
 
 		// braço direito: pesca; fora dela, no barco, segura a vara apontada para a frente
@@ -38,12 +41,23 @@ public final class PoseMarcio {
 		dir.y -= 0.25f * resp;
 		esq.y -= 0.25f * resp;
 		head.y -= 0.12f * resp;
-		head.zRot += 0.02f * Mth.sin(age * 0.05f + r * 2f); // inclina a cabeça de leve, à toa
+		if (!exportando) head.zRot += 0.02f * Mth.sin(age * 0.05f + r * 2f); // inclina a cabeça de leve, à toa
 
 		if (d.sentado) levantar(d, age, r, root, head, body, dir, esq, pernaD, pernaE);
 
 		emPe(d, age, root, head, body, esq, pernaD, pernaE);
+		if (!exportando) {
+			// customizadas (AnimCustom) no lugar das do código: a fase da pesca, ou "parado" sentado no barco
+			AnimCustom.Anim c = pescando ? AnimCustom.get(AnimPesca.NOMES[d.fase]) : AnimCustom.get(AnimCustom.PARADO);
+			if (c != null) AnimCustom.aplicar(c, pescando ? d.tempo : d.agora, pescando ? 1f : d.sentado ? 1f - d.pe : 0f,
+					root, head, body, dir, esq, pernaD, pernaE);
+		}
 		especial(d, root, head, body, dir, esq, pernaD, pernaE);
+		// /marcioanim tocar: entra e sai em 8 ticks
+		if (d.teste != null) {
+			float dur = d.teste.duracao() * 20f, w = AnimPesca.inOutSine(Math.min(d.testeTempo / 8f, (dur - d.testeTempo) / 8f));
+			AnimCustom.aplicar(d.teste, d.testeTempo, w, root, head, body, dir, esq, pernaD, pernaE);
+		}
 	}
 
 	/**
@@ -68,6 +82,7 @@ public final class PoseMarcio {
 		if (d.fase == AnimPesca.NADA) dir.xRot -= 0.5f * impulso;
 
 		// balanço junto com o barco, girando em torno do assento (12 px abaixo do pivô do root)
+		if (exportando) return;
 		float bz = 0.035f * sentado * Mth.sin(age * 0.07f + r), bx = 0.02f * sentado * Mth.sin(age * 0.05f + r * 1.3f);
 		root.zRot += bz;
 		root.xRot += bx;
@@ -98,8 +113,11 @@ public final class PoseMarcio {
 
 	private static void especial(DadosMarcio d, ModelPart root, ModelPart head, ModelPart body, ModelPart dir, ModelPart esq,
 	                             ModelPart pernaD, ModelPart pernaE) {
-		float w = AnimMarcio.peso(d.anim, d.animTempo);
+		if (d.anim == AnimMarcio.NADA) return;
+		float w = exportando ? 1f : AnimMarcio.peso(d.anim, d.animTempo);
 		if (w <= 0) return;
+		AnimCustom.Anim c = exportando ? null : AnimCustom.get(AnimMarcio.NOMES[d.anim]);
+		if (c != null) { AnimCustom.aplicar(c, d.animTempo, w, root, head, body, dir, esq, pernaD, pernaE); return; }
 		float t = d.animTempo, u = t / AnimMarcio.duracao(d.anim);
 		switch (d.anim) {
 			case AnimMarcio.ESPREGUICAR -> {

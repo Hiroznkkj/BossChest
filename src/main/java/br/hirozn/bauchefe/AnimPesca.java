@@ -11,6 +11,8 @@ import net.minecraft.world.phys.Vec3;
 public final class AnimPesca {
 	public static final int NADA = 0, PREPARA = 1, VOO = 2, BOIANDO = 3, MORDIDA = 4, PUXANDO = 5, LUTA = 6;
 	public static final int DUR_PREPARA = 10, DUR_VOO = 12, DUR_MORDIDA = 14, DUR_PUXANDO = 18;
+	/** Nome de cada fase nas animações customizadas (config/bauchefe/animacoes), na ordem dos ids. */
+	public static final String[] NOMES = {null, "pesca_preparar", "pesca_lancar", "pesca_boiando", "pesca_mordida", "pesca_puxar", "pesca_luta"};
 	/** Peixe difícil: briga de 4,5 s entre a mordida e a puxada (ele fica de pé e o barco balança). */
 	public static final int DUR_LUTA = 90;
 	/** Em VOO a boia sai da vara neste tick e chega na água no fim da fase. */

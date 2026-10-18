@@ -88,6 +88,10 @@ public final class Pescador {
 		BlockPos barril; // posto de trabalho (marca a doca)
 		int calma; // ticks sem monstro por perto, fugindo
 		int esperar; // sem caminho nem lugar para pescar: espera um pouco antes de tentar de novo
+		Vec3 ancora; // onde ele estava da última vez que andou de verdade (mais de 4 blocos)
+		int ancoraT, puxando; // desde quando está ali; ticks puxando o barco afundado pela corda
+		boolean sair; // preso no mesmo lugar (beco, canal estreito): não pesca até sair dali
+		int deslizarAte; // depois de encalhar 2 vezes: empurra o barco com o remo pelo meio do caminho até lá
 		boolean bebado; // de vez em quando acorda bêbado: fala bobagem e rema torto o dia todo
 		// /bauchefe marcio testar: resultado forçado da pesca, mordida rápida, fora do barco até, fila do "tudo"
 		Boolean testeFisga, testeDificil;
@@ -109,6 +113,7 @@ public final class Pescador {
 			relogio++;
 			peixesVoando.removeIf(e -> { if (e.tickCount > VOO_PEIXE || !e.isAlive()) { e.discard(); return true; } return false; });
 			if (relogio % 100 == 0) procurar(level);
+			if (relogio % 20 == 0) cuidarDoPinto(level);
 			for (Iterator<Map.Entry<UUID, Estado>> it = estados.entrySet().iterator(); it.hasNext(); ) {
 				var en = it.next();
 				Estado s = en.getValue();
@@ -247,15 +252,21 @@ public final class Pescador {
 		if (relogio < s.animFim) { animando(level, v, barco, s); return; }
 		if (noite(level)) { noturno(level, v, barco, s); return; }
 		if (s.modo != Modo.NAVEGANDO) { s.modo = Modo.NAVEGANDO; s.caminho = List.of(); s.idx = 0; }
+		// preso no mesmo lugar (beco, canal estreito) por 1 min e meio: para de pescar e procura a saída
+		Vec3 aqui = barco.position();
+		if (s.ancora == null || aqui.distanceToSqr(s.ancora) > 4 * 4) { s.ancora = aqui; s.ancoraT = relogio; s.sair = false; }
+		else if (!s.sair && relogio - s.ancoraT > 1800) { s.sair = true; s.caminho = List.of(); s.idx = 0; }
 
 		if (s.idx >= s.caminho.size()) {
 			if (relogio < s.esperar) { frear(barco, 0.6); olhar(level, v, s, r); return; }
 			// parado entre um trecho e outro: às vezes faz uma animação à toa
-			if (relogio >= s.proximaAnim && comecarAnim(level, v, barco, s, r, 0)) return;
-			if (s.timer <= 0 && r.nextFloat() < 0.6f && comecarPesca(level, v, barco, s, r)) return;
+			if (!s.sair && relogio >= s.proximaAnim && comecarAnim(level, v, barco, s, r, 0)) return;
+			if (!s.sair && s.timer <= 0 && r.nextFloat() < 0.6f && comecarPesca(level, v, barco, s, r)) return;
 			planejar(level, barco, s, r, null);
 			if (s.caminho.isEmpty()) {
-				// sem caminho: pesca dali mesmo; se nem isso, espera 2 s e empurra o barco para o meio da água
+				// nenhuma água alcançável além de onde está: aí sim pesca dali mesmo;
+				// se nem isso, espera 2 s e empurra o barco para o meio da água
+				s.sair = false; s.ancoraT = relogio;
 				if (comecarPesca(level, v, barco, s, r)) return;
 				s.esperar = relogio + 40;
 				centralizar(level, barco);
@@ -299,10 +310,20 @@ public final class Pescador {
 			if (Math.pow(c.getX() + 0.5 - pos.x, 2) + Math.pow(c.getZ() + 0.5 - pos.z, 2) >= raio * raio) break;
 			s.idx++;
 		}
+		// em canal de 1 bloco os raios laterais com a largura toda do barco batem sempre na margem
+		BlockPos sob = partida(level, barco);
+		double meia = sob != null && largura(level, sob) <= 4 ? 0.3 : 0.65;
+		// canal de 1 bloco (o barco tem 1,4 de largura e entala nas margens) ou encalhado de novo:
+		// ele empurra o barco com o remo, deslizando pelo meio do caminho, sem a física do barco
+		BlockPos prox = s.caminho.get(s.idx);
+		if (s.re == 0 && (meia < 0.5 || largura(level, prox) <= 4 || relogio < s.deslizarAte)) {
+			deslizar(level, v, barco, s, prox, r);
+			return false;
+		}
 		BlockPos alvo = s.caminho.get(s.idx);
 		for (int k = s.idx + 1; k < s.caminho.size(); k++) {
 			BlockPos q = s.caminho.get(k);
-			if (Math.pow(q.getX() + 0.5 - pos.x, 2) + Math.pow(q.getZ() + 0.5 - pos.z, 2) > 3.5 * 3.5 || !retaDeAgua(level, pos, q)) break;
+			if (Math.pow(q.getX() + 0.5 - pos.x, 2) + Math.pow(q.getZ() + 0.5 - pos.z, 2) > 3.5 * 3.5 || !retaDeAgua(level, pos, q, meia + 0.1)) break;
 			alvo = q;
 		}
 
@@ -323,16 +344,16 @@ public final class Pescador {
 		// raios: se o rumo desejado bate na margem logo ali, testa rumos vizinhos e pega o mais livre
 		// (com folga para a largura do barco); e diminui quando a água à frente é curta
 		double y = barco.getY();
-		if (raio(level, pos, querido, 4, y) < 2.5) {
+		if (raio(level, pos, querido, 4, y, meia) < 2.5) {
 			float melhor = 0;
 			double nota = -1e9;
 			for (int a = -75; a <= 75; a += 15) {
-				double n = raio(level, pos, querido + a, 4, y) - Math.abs(a) / 40.0;
+				double n = raio(level, pos, querido + a, 4, y, meia) - Math.abs(a) / 40.0;
 				if (n > nota) { nota = n; melhor = a; }
 			}
 			querido += melhor;
 		}
-		vel *= Mth.clamp(raio(level, pos, yaw, 4, y) / 2.5, 0.25, 1.0);
+		vel *= Mth.clamp(raio(level, pos, yaw, 4, y, meia) / 2.5, 0.25, 1.0);
 		float erro = Mth.wrapDegrees(querido - yaw);
 		yaw += Mth.clamp(erro, -6f, 6f);
 		vel *= Mth.clamp(1f - Math.abs(erro) / 70f, 0.15f, 1f); // curva fechada: vira quase parado
@@ -357,6 +378,23 @@ public final class Pescador {
 		return false;
 	}
 
+	/** Leva o barco até o meio do bloco 'c' direto pela posição (sem colisão com a margem), virando a proa para lá. */
+	private static void deslizar(ServerLevel level, Villager v, AbstractBoat barco, Estado s, BlockPos c, RandomSource r) {
+		Vec3 pos = barco.position();
+		double dx = c.getX() + 0.5 - pos.x, dz = c.getZ() + 0.5 - pos.z, len = Math.sqrt(dx * dx + dz * dz);
+		float yaw = barco.getYRot(), erro = Mth.wrapDegrees((float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG) - yaw);
+		yaw += Mth.clamp(erro, -10f, 10f);
+		barco.setYRot(yaw);
+		barco.setYHeadRot(yaw);
+		barco.setDeltaMovement(0, barco.getDeltaMovement().y, 0);
+		// devagar, e quase parado enquanto a proa ainda está virando
+		double passo = Math.min(len, VELOCIDADE * 0.8 * Mth.clamp(1f - Math.abs(erro) / 120f, 0.2f, 1f));
+		if (len > 1e-3) barco.setPos(pos.x + dx / len * passo, barco.getY(), pos.z + dz / len * passo);
+		s.ultimaPos = barco.position(); // não conta como encalhe
+		v.getLookControl().setLookAt(c.getX() + 0.5, barco.getY() + 0.6, c.getZ() + 0.5);
+		if (relogio % 30 == 0) level.playSound(null, barco.getX(), barco.getY(), barco.getZ(), SoundEvents.BOAT_PADDLE_WATER, SoundSource.NEUTRAL, 0.4f, 0.9f + r.nextFloat() * 0.2f);
+	}
+
 	/**
 	 * Encalhou: marca os blocos logo à frente para o próximo caminho desviar deles por 1 min e dá ré.
 	 * Se encalhar 3 vezes seguidas, empurra o barco de leve para o meio do bloco de água mais livre por perto.
@@ -370,6 +408,7 @@ public final class Pescador {
 			s.evitar.put(b, relogio + 1200);
 		}
 		for (int k = s.idx; k < Math.min(s.caminho.size(), s.idx + 2); k++) s.evitar.put(s.caminho.get(k), relogio + 1200);
+		if (s.travas >= 2) s.deslizarAte = relogio + 15 + 60; // depois da ré, empurra com o remo por 3 s
 		if (s.travas >= 3) {
 			centralizar(level, barco);
 			s.travas = 0;
@@ -392,8 +431,8 @@ public final class Pescador {
 	}
 
 	/** Quanto dá para andar em linha reta nesse rumo (graus, como o yaw) até bater na margem, até 'max' blocos. */
-	private static double raio(Level level, Vec3 de, float rumo, double max, double y) {
-		double rad = rumo * Mth.DEG_TO_RAD, fx = -Mth.sin(rad), fz = Mth.cos(rad), lx = -fz * 0.65, lz = fx * 0.65;
+	private static double raio(Level level, Vec3 de, float rumo, double max, double y, double meia) {
+		double rad = rumo * Mth.DEG_TO_RAD, fx = -Mth.sin(rad), fz = Mth.cos(rad), lx = -fz * meia, lz = fx * meia;
 		for (double t = 0.4; t <= max; t += 0.25) {
 			double x = de.x + fx * t, z = de.z + fz * t;
 			if (!aguaEm(level, new Vec3(x, 0, z), y) || !aguaEm(level, new Vec3(x + lx, 0, z + lz), y)
@@ -435,11 +474,11 @@ public final class Pescador {
 	}
 
 	/** A linha reta do barco até esse ponto passa só por água, com folga para a largura do barco? */
-	private static boolean retaDeAgua(Level level, Vec3 de, BlockPos ate) {
+	private static boolean retaDeAgua(Level level, Vec3 de, BlockPos ate, double meia) {
 		Vec3 para = Vec3.atBottomCenterOf(ate);
 		double dx = para.x - de.x, dz = para.z - de.z, len = Math.sqrt(dx * dx + dz * dz);
 		if (len < 0.01) return true;
-		double nx = -dz / len * 0.75, nz = dx / len * 0.75; // meia largura do barco (1,375) com folga
+		double nx = -dz / len * meia, nz = dx / len * meia; // meia largura do barco com folga (menos em canal estreito)
 		for (double t = 0; t <= len; t += 0.5) {
 			double x = de.x + dx * t / len, z = de.z + dz * t / len;
 			for (int lado = -1; lado <= 1; lado++)
@@ -605,8 +644,9 @@ public final class Pescador {
 	private static void noturno(ServerLevel level, Villager v, AbstractBoat barco, Estado s) {
 		if (s.modo == Modo.NAVEGANDO) {
 			s.bebado = false;
-			s.modo = planejarDoca(level, barco, s) ? Modo.INDO_DOCA : Modo.PARADO_NOITE;
-			falar(level, v, s, s.modo == Modo.INDO_DOCA ? Falas.Tipo.NOITE : Falas.Tipo.SEM_DOCA, null, false);
+			Modo m = planejarDoca(level, barco, s) ? Modo.INDO_DOCA : Modo.PARADO_NOITE;
+			falar(level, v, s, m == Modo.INDO_DOCA ? Falas.Tipo.NOITE : Falas.Tipo.SEM_DOCA, null, false); // antes de "dormir"
+			s.modo = m;
 		}
 		if (s.modo == Modo.PARADO_NOITE) { frear(barco, 0.6); return; } // sem doca: passa a noite no barco
 		if (s.idx >= s.caminho.size()) { // chegou na doca
@@ -649,6 +689,7 @@ public final class Pescador {
 			if (barco != null) s.barco = barco.getUUID();
 		}
 		if (barco == null) return s.voltando <= 2400;
+		if (barco.isUnderWater()) { s.modo = Modo.BUSCANDO; s.voltando = 0; return true; } // afundou de noite: vai buscar com a corda
 		double d = v.distanceToSqr(barco);
 		// perto do barco embarca; se ficar enroscado por 2 min, embarca de qualquer jeito
 		if (d < 4.0 * 4.0 || (s.voltando > 2400 && d < 32 * 32)) { embarcar(level, v, barco, s); return true; } // da doca ele alcança o barco
@@ -673,6 +714,7 @@ public final class Pescador {
 		s.doca = null;
 		s.caminho = List.of(); s.idx = 0;
 		s.timer = 200;
+		s.ancora = null; s.sair = false;
 	}
 
 	/** Barco com baú sem pescador (pode ter o Pinto) mais próximo. */
@@ -745,8 +787,9 @@ public final class Pescador {
 
 	/**
 	 * Sem barco: procura o dele (ou um livre) a até RAIO_BARCO blocos e vai até ele, andando ou nadando.
-	 * Se o barco estiver afundado, amarra uma corda (lead) nele e nada para longe puxando até ele subir;
-	 * com o barco boiando e perto, solta a corda e embarca. Devolve false quando desiste.
+	 * Se o barco estiver afundado, nada até a superfície em cima dele, amarra uma corda curta e puxa o barco
+	 * até ele, boiando no lugar (não sai da água). Com o barco boiando e perto, solta a corda e embarca.
+	 * Devolve false quando desiste.
 	 */
 	private static boolean buscar(ServerLevel level, Villager v, Estado s) {
 		segurarVara(v);
@@ -761,27 +804,94 @@ public final class Pescador {
 		}
 		if (barco == null) return s.voltando <= 1200; // procura por 1 min
 		boolean fundo = barco.isUnderWater();
-		boolean puxando = barco.isLeashed() && barco.getLeashHolder() == v;
-		double d = v.distanceToSqr(barco);
-		if (!fundo && d < 4.0 * 4.0) { // barco boiando e perto: sobe
-			if (puxando) barco.removeLeash();
-			embarcar(level, v, barco, s);
-			return true;
-		}
-		if (fundo && !puxando && Math.pow(barco.getX() - v.getX(), 2) + Math.pow(barco.getZ() - v.getZ(), 2) < 3 * 3 && d < 10 * 10) {
-			barco.setLeashedTo(v, true); // corda no barco afundado
-			falar(level, v, s, Falas.Tipo.CORDA, null, false);
-		}
-		if (s.voltando % 10 == 1) {
-			if (puxando) {
-				// nada para longe do barco, puxando a corda, até ele subir
-				Vec3 sai = v.position().subtract(barco.position()).multiply(1, 0, 1);
-				sai = sai.lengthSqr() < 0.01 ? new Vec3(1, 0, 0) : sai.normalize();
-				v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(v.position().add(sai.scale(4)), 0.7f, 0));
-			} else v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(barco, 0.75f, 1));
-		}
+		boolean corda = barco.isLeashed() && barco.getLeashHolder() == v;
 		v.getLookControl().setLookAt(barco, 30f, 30f);
-		return s.voltando <= 3600; // desiste depois de 3 min
+		if (!fundo) {
+			if (corda) barco.removeLeash();
+			if (v.distanceToSqr(barco) < 4.0 * 4.0) { embarcar(level, v, barco, s); return true; } // perto: sobe
+			irAte(v, barco.position(), s.voltando);
+			return s.voltando <= 3600; // desiste depois de 3 min
+		}
+		// afundado: o ponto da superfície mais perto do barco (direto em cima, ou do lado se tiver algo por cima)
+		Vec3 sup = superficie(level, barco);
+		if (sup == null) return s.voltando <= 3600;
+		double h = Math.pow(sup.x - v.getX(), 2) + Math.pow(sup.z - v.getZ(), 2);
+		if (!corda && h < 1.5 * 1.5 && v.isInWater()) {
+			barco.setLeashedTo(v, true); // corda curta no barco afundado
+			s.puxando = 0;
+			falar(level, v, s, Falas.Tipo.CORDA, null, false);
+			corda = true;
+		}
+		if (!corda) { irAte(v, sup, s.voltando); return s.voltando <= 3600; }
+		// boia no lugar e puxa a corda: o barco vem até embaixo dele e sobe (corda de ~1,5 bloco)
+		s.puxando++;
+		v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+		v.getNavigation().stop();
+		Vec3 para = new Vec3(v.getX(), sup.y - 0.2, v.getZ()).subtract(barco.position());
+		double len = para.length();
+		if (len > 0.3) barco.setDeltaMovement(para.scale(Math.min(0.12, 0.05 * len) / len).add(0, 0.04, 0));
+		if (s.puxando % 40 == 0) level.playSound(null, v.getX(), v.getY(), v.getZ(), SoundEvents.LEAD_TIED, SoundSource.NEUTRAL, 0.5f, 0.8f);
+		if (s.puxando > 600) { // 30 s e nada: o barco solta de vez e sobe
+			barco.setPos(sup.x, sup.y - 0.4, sup.z);
+			s.puxando = 0;
+		}
+		return s.voltando <= 3600;
+	}
+
+	/** Anda até o ponto; na água vai nadando direto (sem dar a volta por terra). */
+	private static void irAte(Villager v, Vec3 alvo, int t) {
+		if (v.isInWater()) {
+			v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+			Vec3 d = new Vec3(alvo.x - v.getX(), 0, alvo.z - v.getZ());
+			if (d.lengthSqr() > 0.25) {
+				d = d.normalize();
+				Vec3 m = v.getDeltaMovement();
+				v.setDeltaMovement(m.x * 0.8 + d.x * 0.04, Math.max(m.y, v.getY() < alvo.y - 0.6 ? 0.04 : m.y), m.z * 0.8 + d.z * 0.04);
+				v.setYRot((float) (Mth.atan2(-d.x, d.z) * Mth.RAD_TO_DEG));
+				v.yBodyRot = v.getYRot();
+			}
+		} else if (t % 10 == 1) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(alvo, 0.75f, 1));
+	}
+
+	/** Ponto na superfície da água mais perto do barco afundado (até 4 blocos para o lado, fora de coluna de bolhas), ou null. */
+	private static Vec3 superficie(Level level, AbstractBoat barco) {
+		BlockPos b = barco.blockPosition();
+		BlockPos melhor = null;
+		double best = Double.MAX_VALUE;
+		for (int dx = -4; dx <= 4; dx++) for (int dz = -4; dz <= 4; dz++) for (int dy = 0; dy <= 8; dy++) {
+			BlockPos q = b.offset(dx, dy, dz);
+			if (!agua(level, q)) continue;
+			double d = dx * dx + dz * dz + dy * 0.1;
+			if (d < best) { best = d; melhor = q; }
+			break; // a superfície dessa coluna
+		}
+		return melhor == null ? null : new Vec3(melhor.getX() + 0.5, melhor.getY() + 0.9, melhor.getZ() + 0.5);
+	}
+
+	// ---------- o Pinto ----------
+
+	/** O Pinto não vai embora: fora do barco, volta para o barco do Márcio (ou para perto dele) e sobe de novo. */
+	private static void cuidarDoPinto(ServerLevel level) {
+		for (Chicken c : level.getEntities(EntityTypes.CHICKEN, Pescador::ehPinto)) {
+			if (c.isPassenger() || c.isLeashed() || !c.isAlive()) continue;
+			Villager v = null;
+			double best = 64 * 64;
+			for (Villager x : level.getEntities(EntityTypes.VILLAGER, Pescador::ehPescador)) {
+				double d = x.distanceToSqr(c);
+				if (d < best) { best = d; v = x; }
+			}
+			if (v == null) continue;
+			AbstractBoat barco = v.getVehicle() instanceof AbstractBoat b ? b : barcoDele(level, v, 64);
+			Entity alvo = barco != null && !barco.isUnderWater() ? barco : v;
+			double d = c.distanceToSqr(alvo);
+			boolean cabe = barco != null && !barco.isUnderWater() && !barco.hasPassenger(Pescador::ehPinto)
+					&& !barco.hasPassenger(p -> p instanceof Player) && barco.getPassengers().size() < 2;
+			// encostou no barco, ou se perdeu longe (como os bichos de estimação): sobe em cima do baú
+			if (cabe && (d < 2.5 * 2.5 || d > 24 * 24)) {
+				c.getNavigation().stop();
+				c.startRiding(barco, true, true);
+			} else if (d > 3 * 3) c.getNavigation().moveTo(alvo, 1.2);
+		}
 	}
 
 	// ---------- fuga ----------
@@ -853,6 +963,9 @@ public final class Pescador {
 	 * ('forcar' ignora esse intervalo) e só se tiver alguém a menos de 32 blocos.
 	 */
 	private static boolean falar(ServerLevel level, Villager v, Estado s, Falas.Tipo tipo, String nome, boolean forcar) {
+		if (v.isSleeping()) return false; // não fala dormindo
+		// passando a noite (no barco sem doca ou indo para a cama): só fala se for urgente (medo, roubo)
+		if (!forcar && (s.modo == Modo.PARADO_NOITE || (s.modo == Modo.EM_TERRA && noite(level)))) return false;
 		if (!forcar && relogio < s.proximaFala) return false;
 		if (level.getNearestPlayer(v, 32) == null) return false;
 		Falas.Linha l = Falas.frase(tipo, level.getRandom(), nome);
@@ -1129,8 +1242,9 @@ public final class Pescador {
 
 	// ---------- navegação (estilo peixe) ----------
 
+	/** Superfície de água boa para o barco (coluna de bolhas não: puxa o barco para o fundo ou joga para cima). */
 	static boolean agua(Level level, BlockPos p) {
-		return level.getFluidState(p).is(FluidTags.WATER) && level.getBlockState(p.above()).isAir();
+		return level.getFluidState(p).is(FluidTags.WATER) && level.getBlockState(p.above()).isAir() && !level.getBlockState(p).is(Blocks.BUBBLE_COLUMN);
 	}
 
 	/**
@@ -1148,26 +1262,46 @@ public final class Pescador {
 		custo.put(ini, 0.0); passos.put(ini, 0); fila.add(ini);
 		List<BlockPos> candidatos = new ArrayList<>();
 		Set<BlockPos> feito = new HashSet<>();
+		// se ele já está longe de casa (fugiu, buscou o barco), o limite cresce até onde ele está, para poder voltar
+		int limite = Math.max(LONGE_DE_CASA, ini.distManhattan(s.casa) + 8);
 		while (!fila.isEmpty() && feito.size() < BUSCA_MAX) {
 			BlockPos p = fila.poll();
 			if (!feito.add(p)) continue;
 			int d = passos.get(p);
 			if (d >= 8 && d <= 28) candidatos.add(p);
 			for (BlockPos q : new BlockPos[]{p.north(), p.south(), p.east(), p.west()}) {
-				if (feito.contains(q) || q.distManhattan(s.casa) > LONGE_DE_CASA || !agua(level, q) || !livreDeEncalhe(s, q)) continue;
+				if (feito.contains(q) || q.distManhattan(s.casa) > limite || !agua(level, q) || !livreDeEncalhe(s, q)) continue;
 				double c = custo.get(p) + 1 + (9 - largura(level, q)) * 0.7; // margem perto = mais caro
 				if (c < custo.getOrDefault(q, Double.MAX_VALUE)) {
 					custo.put(q, c); passos.put(q, d + 1); pai.put(q, p); fila.add(q);
 				}
 			}
 		}
-		if (candidatos.isEmpty()) {
+		if (candidatos.isEmpty() && !s.evitar.isEmpty()) {
 			// talvez os encalhes recentes fecharam o canal: esquece e tenta de novo uma vez
-			if (!s.evitar.isEmpty()) { s.evitar.clear(); planejar(level, barco, s, r, longeDe); }
-			return;
+			s.evitar.clear();
+			planejar(level, barco, s, r, longeDe);
+			if (!s.caminho.isEmpty()) return;
+		}
+		Vec3 anc = s.ancora;
+		if (s.sair && (anc == null || feito.stream().noneMatch(p -> p.distToCenterSqr(anc.x, p.getY() + 0.5, anc.z) > 4.5 * 4.5))) {
+			s.sair = false; s.ancoraT = relogio; // a água toda é pequena: não tem para onde sair, segue a vida ali
 		}
 		BlockPos alvo;
-		if (longeDe != null) { // fugindo: o ponto mais longe do perigo
+		if (s.sair || candidatos.isEmpty()) {
+			// beco, canal estreito ou água curta: a água larga alcançável mais perto (a pelo menos 5 blocos e, se
+			// estava preso, fora de onde ficou preso); se não tiver, a água mais longe que dá para chegar.
+			// Dá meia-volta e sai dali.
+			alvo = null;
+			int melhor = Integer.MAX_VALUE;
+			for (BlockPos p : feito) {
+				int d = passos.get(p);
+				boolean fora = !s.sair || p.distToCenterSqr(anc.x, p.getY() + 0.5, anc.z) > 4.5 * 4.5;
+				if (d >= 5 && d < melhor && fora && largura(level, p) >= 6) { melhor = d; alvo = p; }
+			}
+			if (alvo == null) for (BlockPos p : feito) if (passos.get(p) >= 2 && (alvo == null || passos.get(p) > passos.get(alvo))) alvo = p;
+			if (alvo == null) return; // só tem água onde ele está
+		} else if (longeDe != null) { // fugindo: o ponto mais longe do perigo
 			candidatos.sort(Comparator.comparingDouble(p -> -p.distToCenterSqr(longeDe)));
 			alvo = candidatos.get(0);
 		} else {

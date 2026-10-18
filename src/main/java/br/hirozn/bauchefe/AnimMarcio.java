@@ -9,6 +9,8 @@ import net.minecraft.util.Mth;
 public final class AnimMarcio {
 	public static final int NADA = 0, ESPREGUICAR = 1, COCAR = 2, ACENAR = 3, COMEMORAR = 4, CARINHO = 5;
 	private static final int[] DURACAO = {0, 60, 50, 44, 40, 60};
+	/** Nome de cada uma nas animações customizadas (config/bauchefe/animacoes). */
+	public static final String[] NOMES = {null, "espreguicar", "cocar", "acenar", "comemorar", "carinho"};
 	/** Ticks para entrar e sair da pose (mistura com a pose normal, sem saltos). */
 	public static final float MISTURA = 8f;
 

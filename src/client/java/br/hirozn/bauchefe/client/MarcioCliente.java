@@ -40,6 +40,8 @@ public final class MarcioCliente {
 	private static final Int2ObjectMap<double[]> saltos = new Int2ObjectOpenHashMap<>(); // {x,y,z,t, desvio x,y,z, início}
 	private static final Int2ObjectMap<float[]> assento = new Int2ObjectOpenHashMap<>(); // {1 no barco, tempo da troca}
 	private static final Int2ObjectMap<MarcioSom[]> sons = new Int2ObjectOpenHashMap<>();
+	private record Teste(AnimCustom.Anim anim, long inicio) {}
+	private static final Int2ObjectMap<Teste> testes = new Int2ObjectOpenHashMap<>();
 
 	private MarcioCliente() {}
 
@@ -109,6 +111,11 @@ public final class MarcioCliente {
 		}
 	}
 
+	/** /marcioanim tocar: toca a animação customizada no Márcio (só neste PC). */
+	public static void tocar(int villager, AnimCustom.Anim a) {
+		testes.put(villager, new Teste(a, agora()));
+	}
+
 	/** Preenche os dados do render state do pescador. */
 	public static void extrair(Villager v, LivingEntityRenderState st, float partial, DadosMarcio d) {
 		int id = v.getId();
@@ -138,6 +145,10 @@ public final class MarcioCliente {
 		if (a != null && t - a.inicio() > AnimMarcio.duracao(a.id())) { anims.remove(id); a = null; }
 		d.anim = a == null ? AnimMarcio.NADA : a.id();
 		d.animTempo = a == null ? 0 : t - a.inicio();
+		Teste te = testes.get(id);
+		if (te != null && t - te.inicio() > te.anim().duracao() * 20f) { testes.remove(id); te = null; }
+		d.teste = te == null ? null : te.anim();
+		d.testeTempo = te == null ? 0 : t - te.inicio();
 
 		Fala f = falas.get(id);
 		if (f != null && t - f.inicio() > f.duracao()) { falas.remove(id); f = null; }
