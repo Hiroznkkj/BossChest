@@ -25,6 +25,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.chicken.Chicken;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.npc.villager.Villager;
@@ -36,6 +38,7 @@ import net.minecraft.world.entity.vehicle.boat.AbstractChestBoat;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
@@ -189,10 +192,22 @@ public final class Pescador {
 		if (v.getVillagerXp() <= 0) v.setVillagerXp(1);
 	}
 
-	/** Barril de trabalho do pescador (marca a doca), ou null. */
+	/**
+	 * Barril que marca a doca: o barril de trabalho dele, se tiver; senão o barril mais perto (até 48 blocos)
+	 * que tenha água a até 3 blocos. Barril é o posto do pescador, então o jogo já sabe onde estão (POI).
+	 */
 	private static BlockPos barril(ServerLevel level, Villager v) {
-		return v.getBrain().getMemory(MemoryModuleType.JOB_SITE)
+		BlockPos trabalho = v.getBrain().getMemory(MemoryModuleType.JOB_SITE)
 				.filter(g -> g.dimension() == level.dimension()).map(g -> g.pos()).orElse(null);
+		if (trabalho != null && level.getBlockState(trabalho).is(Blocks.BARREL)) return trabalho;
+		return level.getPoiManager().findClosest(t -> t.is(PoiTypes.FISHERMAN), b -> naBeiraDaAgua(level, b),
+				v.blockPosition(), 48, PoiManager.Occupancy.ANY).orElse(null);
+	}
+
+	private static boolean naBeiraDaAgua(Level level, BlockPos b) {
+		for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) for (int dy = -2; dy <= 0; dy++)
+			if (agua(level, b.offset(dx, dy, dz))) return true;
+		return false;
 	}
 
 	private static void segurarVara(Villager v) {
