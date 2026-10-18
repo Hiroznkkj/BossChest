@@ -803,6 +803,7 @@ public final class Pescador {
 			double d = c.distanceToSqr(origem);
 			if (d < best) { best = d; v = c; }
 		}
+		if (!TESTES.contains(qual)) return "§cNão conheço \"" + qual + "\". Opções: " + String.join(", ", TESTES);
 		if (v == null) return "§cNenhum pescador num raio de 64 blocos";
 		if (!(v.getVehicle() instanceof AbstractBoat barco)) return "§cO pescador precisa estar no barco";
 		Villager dono = v;
@@ -814,7 +815,6 @@ public final class Pescador {
 			s.demoProx = relogio + 20;
 			return "§6Testando tudo: " + String.join(", ", TESTES_TUDO) + " §7(chegue perto para o aceno)";
 		}
-		if (!TESTES.contains(qual)) return "§cNão conheço \"" + qual + "\". Opções: " + String.join(", ", TESTES);
 		return executar(level, v, barco, s, qual);
 	}
 
