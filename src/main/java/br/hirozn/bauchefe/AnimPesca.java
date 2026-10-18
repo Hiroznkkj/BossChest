@@ -16,12 +16,13 @@ public final class AnimPesca {
 	/** Em PUXANDO a boia volta até a vara nestes ticks. */
 	public static final int VOLTA = 7;
 
-	// ângulos do "arms" do VillagerModel (vanilla: -0.75, braços cruzados)
-	private static final float DESCANSO = -0.75f, SEGURANDO = -1.05f, ATRAS = -2.5f, CHICOTE = -0.55f, PUXADO = -2.3f;
+	// rotação X do braço direito do pescador (0 = caído ao lado do corpo, negativo = para a frente/cima)
+	private static final float DESCANSO = -0.35f, SEGURANDO = -0.6f, ATRAS = -2.7f, CHICOTE = -0.25f, PUXADO = -2.1f;
 
-	// ponta da vara no espaço do "arms" (blocos, y para baixo, -z para a frente); ajustar no visual
-	private static final double PONTA_X = -0.40, PONTA_Y = 0.19, PONTA_Z = -0.70;
-	private static final double ARMS_Y = 3 / 16.0, ARMS_Z = -1 / 16.0;
+	// ponta da vara no espaço do braço direito (blocos, y para baixo, -z para a frente); ajustar no visual
+	private static final double PONTA_X = -0.05, PONTA_Y = 0.44, PONTA_Z = -0.70;
+	// pivô do braço direito (ombro), igual ao do pillager
+	private static final double OMBRO_X = -5 / 16.0, OMBRO_Y = 2 / 16.0;
 
 	private AnimPesca() {}
 
@@ -36,7 +37,7 @@ public final class AnimPesca {
 
 	// ---------- braços ----------
 
-	/** Rotação X do "arms" na fase 'fase', 't' ticks depois de ela começar. Contínua entre as fases. */
+	/** Rotação X do braço direito na fase 'fase', 't' ticks depois de ela começar. Contínua entre as fases. */
 	public static float braco(int fase, float t) {
 		return switch (fase) {
 			case PREPARA -> Mth.lerp(inOutCubic(t / DUR_PREPARA), DESCANSO, ATRAS); // levanta a vara para trás
@@ -59,13 +60,13 @@ public final class AnimPesca {
 
 	/**
 	 * Ponta da vara no mundo, refazendo as transformações do LivingEntityRenderer e do VillagerModel
-	 * (rotação 180 - corpo, escala -1,-1,1, translate -1.501, pivô e rotação do "arms").
+	 * (rotação 180 - corpo, escala -1,-1,1, translate -1.501, ombro e rotação do braço direito).
 	 */
 	public static Vec3 ponta(LivingEntity v, float partial, int fase, float t) {
 		float a = braco(fase, t);
 		double c = Mth.cos(a), s = Mth.sin(a);
-		// rotação X do arms (y para baixo, -z para a frente)
-		double mx = PONTA_X, my = ARMS_Y + PONTA_Y * c - PONTA_Z * s, mz = ARMS_Z + PONTA_Y * s + PONTA_Z * c;
+		// rotação X do braço (y para baixo, -z para a frente)
+		double mx = OMBRO_X + PONTA_X, my = OMBRO_Y + PONTA_Y * c - PONTA_Z * s, mz = PONTA_Y * s + PONTA_Z * c;
 		// escala -1,-1,1 e translate -1.501
 		double x = -mx, y = 1.501 - my, z = mz;
 		float yaw = (180f - Mth.rotLerp(partial, v.yBodyRotO, v.yBodyRot)) * Mth.DEG_TO_RAD;

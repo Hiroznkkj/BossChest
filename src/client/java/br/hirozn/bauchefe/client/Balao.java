@@ -44,11 +44,11 @@ public final class Balao {
 		pose.scale(esc, -esc, esc);
 		final int fw = w, fh = h;
 		out.submitCustomGeometry(pose, RENDER, (p, buf) -> moldura(buf, p, fw, fh, a, luz));
-		pose.translate(0f, 0f, -0.1f);
-		int cor = (Math.max(26, (int) (a * 255)) << 24); // texto preto; alpha muito baixo some
+		// texto preto no mesmo plano do balão; o polygon offset puxa ele para a frente (como nas placas)
+		int cor = (Math.max(26, (int) (a * 255)) << 24);
 		for (int i = 0; i < linhas.size(); i++) {
 			FormattedCharSequence l = linhas.get(i);
-			out.submitText(pose, -font.width(l) / 2f, -h / 2f + i * font.lineHeight, l, false, Font.DisplayMode.NORMAL, luz, cor, 0, 0);
+			out.submitText(pose, -font.width(l) / 2f, -h / 2f + i * font.lineHeight, l, false, Font.DisplayMode.POLYGON_OFFSET, luz, cor, 0, 0);
 		}
 		pose.popPose();
 	}
