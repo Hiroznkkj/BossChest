@@ -82,12 +82,6 @@ Por enquanto essas aparecem só no balão, sem voz. Roteiro para colar no Eleven
 | Alta: o dia de bêbado fica mudo sem elas | `bebado_6` | [drunken voice] Vou pescar a lua. [pause] Ela tá pertinho, ó. | Vou pescar a lua. Ela tá pertinho, ó. |
 | Alta: o dia de bêbado fica mudo sem elas | `bebado_7` | [drunken voice] Cadê minha vara? [pause] Ah, tá na mão. | Cadê minha vara? Ah, tá na mão. |
 | Alta: o dia de bêbado fica mudo sem elas | `bebado_8` | [drunken voice] Eu amo vocês, sabia? [voice breaking] Amo até o Pinto. | Eu amo vocês, sabia? Amo até o Pinto. |
-| Alta: cumprimento pelo nome | `oi_hirozn_1` | [excited] Fala, hirozn! Veio pescar? | Fala, hirozn! Veio pescar? |
-| Alta: cumprimento pelo nome | `oi_hirozn_2` | hirozn! Trouxe isca? | hirozn! Trouxe isca? |
-| Alta: cumprimento pelo nome | `oi_hirozn_3` | [chuckling] Opa, hirozn! O Pinto mandou um oi. | Opa, hirozn! O Pinto mandou um oi. |
-| Alta: cumprimento pelo nome | `oi_giizanini_1` | [excited] Oi, giizanini! Quer um peixinho? | Oi, giizanini! Quer um peixinho? |
-| Alta: cumprimento pelo nome | `oi_giizanini_2` | [softly] giizanini! O Pinto tava com saudade. | giizanini! O Pinto tava com saudade. |
-| Alta: cumprimento pelo nome | `oi_giizanini_3` | Que bom te ver, giizanini! | Que bom te ver, giizanini! |
 | Baixa | `sem_doca_1` | [sighing] Sem doca... durmo aqui mesmo. | Sem doca... durmo aqui mesmo. |
 | Baixa | `sem_doca_2` | Barco também é cama, né Pinto? | Barco também é cama, né Pinto? |
 

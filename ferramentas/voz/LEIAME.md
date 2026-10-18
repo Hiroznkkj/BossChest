@@ -6,4 +6,4 @@
 3. Em `falas_dados.py`, acrescente `(arquivo, TIPO, "texto exatamente como foi falado")`.
 4. Gere os .ogg (normal + eco, com fade no começo), o `sounds.json` e os tempos do karaokê:
    `python gerar_audio.py <pasta_dos_mp3> palavras.json ../../src/main/resources`
-5. Em `src/main/java/br/hirozn/bauchefe/Falas.java`, coloque a linha no tipo certo: `new Linha("texto", "arquivo")`.
+5. Em `Falas.java` (pacote do mod), coloque a linha no tipo certo: `new Linha("texto", "arquivo")`.
