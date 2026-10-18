@@ -15,4 +15,7 @@ public class DadosMarcio {
 	public String[] fala;
 	public float[] falaTempos;
 	public float falaSeg, falaAlpha;
+	// /marcioanim tocar: animação customizada tocando só neste PC e há quantos ticks
+	public AnimCustom.Anim teste;
+	public float testeTempo;
 }

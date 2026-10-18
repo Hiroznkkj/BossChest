@@ -1,6 +1,9 @@
 # BossChest
 Mod Fabric "Baú Chefe" (bauchefe) para Minecraft 26.3.
 
+- [FALAS.md](FALAS.md): as falas do Márcio pescador.
+- [ANIMACOES.md](ANIMACOES.md): como fazer e trocar as animações do Márcio no Blockbench (`/marcioanim`).
+
 ## Créditos
 
 - **Uso:** mod sem fins comerciais; não é vendido nem distribuído comercialmente.
