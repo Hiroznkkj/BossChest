@@ -10,10 +10,11 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -26,29 +27,52 @@ public final class Balao {
 
 	private Balao() {}
 
-	/** 'altura': topo da entidade (blocos), já com espaço para o nome se ele aparecer. */
-	public static void desenhar(String texto, float alpha, double altura, PoseStack pose, SubmitNodeCollector out, CameraRenderState camera, int luz) {
-		if (alpha <= 0.02f) return;
+	/**
+	 * 'palavras': a fala em palavras; 'tempos': segundo em que cada uma é dita (null = sem áudio);
+	 * 'seg': quanto já passou. Efeito karaokê: a palavra fica em negrito quando ele fala.
+	 * As posições são medidas em negrito, então o balão não muda de tamanho nem o texto anda.
+	 * 'altura': topo da entidade (blocos), já com espaço para o nome se ele aparecer.
+	 */
+	public static void desenhar(String[] palavras, float[] tempos, float seg, float alpha, double altura,
+	                            PoseStack pose, SubmitNodeCollector out, CameraRenderState camera, int luz) {
+		if (alpha <= 0.02f || palavras.length == 0) return;
 		Font font = Minecraft.getInstance().font;
-		List<FormattedCharSequence> linhas = font.split(Component.literal(texto), LARGURA_MAX);
+		int espaco = font.width(Component.literal(" ").withStyle(ChatFormatting.BOLD));
+		// quebra de linha medida em negrito
+		int[] larg = new int[palavras.length], linha = new int[palavras.length], xPal = new int[palavras.length];
+		List<Integer> largLinha = new ArrayList<>();
+		int x = 0, n = 0;
+		for (int i = 0; i < palavras.length; i++) {
+			larg[i] = font.width(Component.literal(palavras[i]).withStyle(ChatFormatting.BOLD));
+			if (x > 0 && x + espaco + larg[i] > LARGURA_MAX) { largLinha.add(x); n++; x = 0; }
+			if (x > 0) x += espaco;
+			linha[i] = n;
+			xPal[i] = x;
+			x += larg[i];
+		}
+		largLinha.add(x);
 		int w = 0;
-		for (FormattedCharSequence l : linhas) w = Math.max(w, font.width(l));
-		int h = font.lineHeight * linhas.size();
+		for (int l : largLinha) w = Math.max(w, l);
+		int linhas = largLinha.size(), h = font.lineHeight * linhas;
 		float a = alpha;
 		// sobe e cresce um pouquinho ao aparecer
 		float esc = 0.025f * (0.85f + 0.15f * Mth.clamp(alpha * 2f, 0f, 1f));
 
 		pose.pushPose();
-		pose.translate(0.0, altura + 0.5 + 0.1 * linhas.size(), 0.0);
+		pose.translate(0.0, altura + 0.5 + 0.1 * linhas, 0.0);
 		pose.rotate(camera.orientation);
 		pose.scale(esc, -esc, esc);
 		final int fw = w, fh = h;
 		out.submitCustomGeometry(pose, RENDER, (p, buf) -> moldura(buf, p, fw, fh, a, luz));
-		// texto preto no mesmo plano do balão; o polygon offset puxa ele para a frente (como nas placas)
-		int cor = (Math.max(26, (int) (a * 255)) << 24);
-		for (int i = 0; i < linhas.size(); i++) {
-			FormattedCharSequence l = linhas.get(i);
-			out.submitText(pose, -font.width(l) / 2f, -h / 2f + i * font.lineHeight, l, false, Font.DisplayMode.POLYGON_OFFSET, luz, cor, 0, 0);
+		// texto no mesmo plano do balão; o polygon offset puxa ele para a frente (como nas placas)
+		int alfa = Math.max(26, (int) (a * 255)) << 24;
+		for (int i = 0; i < palavras.length; i++) {
+			boolean dita = tempos != null && i < tempos.length && seg >= tempos[i];
+			Component c = dita ? Component.literal(palavras[i]).withStyle(ChatFormatting.BOLD) : Component.literal(palavras[i]);
+			int cor = alfa | (tempos == null || dita ? 0x000000 : 0x3A3A3A); // ainda não dita: um pouco mais clara
+			float lx = -largLinha.get(linha[i]) / 2f + xPal[i] + (dita ? 0 : (larg[i] - font.width(c)) / 2f);
+			out.submitText(pose, lx, -h / 2f + linha[i] * font.lineHeight, c.getVisualOrderText(), false,
+					Font.DisplayMode.POLYGON_OFFSET, luz, cor, 0, 0);
 		}
 		pose.popPose();
 	}

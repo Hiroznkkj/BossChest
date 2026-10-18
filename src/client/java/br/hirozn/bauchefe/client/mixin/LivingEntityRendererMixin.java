@@ -23,6 +23,6 @@ public abstract class LivingEntityRendererMixin {
 		DadosMarcio d = ((EstadoPescador) vs).bauchefe$dados();
 		if (!d.pescador || d.fala == null) return;
 		double altura = st.boundingBoxHeight + (st.nameTag != null ? 0.3 : 0);
-		Balao.desenhar(d.fala, d.falaAlpha, altura, pose, out, camera, 0xF000F0);
+		Balao.desenhar(d.fala, d.falaTempos, d.falaSeg, d.falaAlpha, altura, pose, out, camera, 0xF000F0);
 	}
 }

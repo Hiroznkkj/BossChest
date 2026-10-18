@@ -1,0 +1,786 @@
+{
+ "marcio.acordou_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/acordou_1"
+   }
+  ]
+ },
+ "marcio.acordou_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/acordou_1_eco"
+   }
+  ]
+ },
+ "marcio.bocejo_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/bocejo_1"
+   }
+  ]
+ },
+ "marcio.bocejo_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/bocejo_1_eco"
+   }
+  ]
+ },
+ "marcio.cancao_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/cancao_1"
+   }
+  ]
+ },
+ "marcio.cancao_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/cancao_1_eco"
+   }
+  ]
+ },
+ "marcio.carinho_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/carinho_1"
+   }
+  ]
+ },
+ "marcio.carinho_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/carinho_1_eco"
+   }
+  ]
+ },
+ "marcio.carinho_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/carinho_3"
+   }
+  ]
+ },
+ "marcio.carinho_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/carinho_3_eco"
+   }
+  ]
+ },
+ "marcio.devolveu_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/devolveu_2"
+   }
+  ]
+ },
+ "marcio.devolveu_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/devolveu_2_eco"
+   }
+  ]
+ },
+ "marcio.devolveu_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/devolveu_3"
+   }
+  ]
+ },
+ "marcio.devolveu_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/devolveu_3_eco"
+   }
+  ]
+ },
+ "marcio.devolveu_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/devolveu_4"
+   }
+  ]
+ },
+ "marcio.devolveu_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/devolveu_4_eco"
+   }
+  ]
+ },
+ "marcio.noite_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/noite_1"
+   }
+  ]
+ },
+ "marcio.noite_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/noite_1_eco"
+   }
+  ]
+ },
+ "marcio.noite_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/noite_2"
+   }
+  ]
+ },
+ "marcio.noite_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/noite_2_eco"
+   }
+  ]
+ },
+ "marcio.oi_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/oi_1"
+   }
+  ]
+ },
+ "marcio.oi_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/oi_1_eco"
+   }
+  ]
+ },
+ "marcio.oi_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/oi_2"
+   }
+  ]
+ },
+ "marcio.oi_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/oi_2_eco"
+   }
+  ]
+ },
+ "marcio.oi_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/oi_3"
+   }
+  ]
+ },
+ "marcio.oi_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/oi_3_eco"
+   }
+  ]
+ },
+ "marcio.oi_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/oi_4"
+   }
+  ]
+ },
+ "marcio.oi_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/oi_4_eco"
+   }
+  ]
+ },
+ "marcio.peixe_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_1"
+   }
+  ]
+ },
+ "marcio.peixe_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_1_eco"
+   }
+  ]
+ },
+ "marcio.peixe_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_2"
+   }
+  ]
+ },
+ "marcio.peixe_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_2_eco"
+   }
+  ]
+ },
+ "marcio.peixe_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_3"
+   }
+  ]
+ },
+ "marcio.peixe_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_3_eco"
+   }
+  ]
+ },
+ "marcio.peixe_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_4"
+   }
+  ]
+ },
+ "marcio.peixe_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_4_eco"
+   }
+  ]
+ },
+ "marcio.peixe_6": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_6"
+   }
+  ]
+ },
+ "marcio.peixe_6_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/peixe_6_eco"
+   }
+  ]
+ },
+ "marcio.piada_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_1"
+   }
+  ]
+ },
+ "marcio.piada_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_1_eco"
+   }
+  ]
+ },
+ "marcio.piada_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_2"
+   }
+  ]
+ },
+ "marcio.piada_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_2_eco"
+   }
+  ]
+ },
+ "marcio.piada_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_3"
+   }
+  ]
+ },
+ "marcio.piada_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_3_eco"
+   }
+  ]
+ },
+ "marcio.piada_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_4"
+   }
+  ]
+ },
+ "marcio.piada_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_4_eco"
+   }
+  ]
+ },
+ "marcio.piada_5": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_5"
+   }
+  ]
+ },
+ "marcio.piada_5_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_5_eco"
+   }
+  ]
+ },
+ "marcio.piada_6": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_6"
+   }
+  ]
+ },
+ "marcio.piada_6_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_6_eco"
+   }
+  ]
+ },
+ "marcio.piada_7": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_7"
+   }
+  ]
+ },
+ "marcio.piada_7_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_7_eco"
+   }
+  ]
+ },
+ "marcio.piada_8": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_8"
+   }
+  ]
+ },
+ "marcio.piada_8_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_8_eco"
+   }
+  ]
+ },
+ "marcio.piada_9": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_9"
+   }
+  ]
+ },
+ "marcio.piada_9_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/piada_9_eco"
+   }
+  ]
+ },
+ "marcio.pinto_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_1"
+   }
+  ]
+ },
+ "marcio.pinto_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_1_eco"
+   }
+  ]
+ },
+ "marcio.pinto_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_2"
+   }
+  ]
+ },
+ "marcio.pinto_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_2_eco"
+   }
+  ]
+ },
+ "marcio.pinto_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_3"
+   }
+  ]
+ },
+ "marcio.pinto_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_3_eco"
+   }
+  ]
+ },
+ "marcio.pinto_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_4"
+   }
+  ]
+ },
+ "marcio.pinto_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_4_eco"
+   }
+  ]
+ },
+ "marcio.pinto_6": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_6"
+   }
+  ]
+ },
+ "marcio.pinto_6_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_6_eco"
+   }
+  ]
+ },
+ "marcio.pinto_7": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_7"
+   }
+  ]
+ },
+ "marcio.pinto_7_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/pinto_7_eco"
+   }
+  ]
+ },
+ "marcio.raro_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/raro_1"
+   }
+  ]
+ },
+ "marcio.raro_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/raro_1_eco"
+   }
+  ]
+ },
+ "marcio.raro_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/raro_2"
+   }
+  ]
+ },
+ "marcio.raro_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/raro_2_eco"
+   }
+  ]
+ },
+ "marcio.raro_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/raro_3"
+   }
+  ]
+ },
+ "marcio.raro_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/raro_3_eco"
+   }
+  ]
+ },
+ "marcio.raro_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/raro_4"
+   }
+  ]
+ },
+ "marcio.raro_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/raro_4_eco"
+   }
+  ]
+ },
+ "marcio.roubo_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_1"
+   }
+  ]
+ },
+ "marcio.roubo_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_1_eco"
+   }
+  ]
+ },
+ "marcio.roubo_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_2"
+   }
+  ]
+ },
+ "marcio.roubo_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_2_eco"
+   }
+  ]
+ },
+ "marcio.roubo_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_3"
+   }
+  ]
+ },
+ "marcio.roubo_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_3_eco"
+   }
+  ]
+ },
+ "marcio.roubo_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_4"
+   }
+  ]
+ },
+ "marcio.roubo_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_4_eco"
+   }
+  ]
+ },
+ "marcio.roubo_5": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_5"
+   }
+  ]
+ },
+ "marcio.roubo_5_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_5_eco"
+   }
+  ]
+ },
+ "marcio.roubo_6": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_6"
+   }
+  ]
+ },
+ "marcio.roubo_6_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/roubo_6_eco"
+   }
+  ]
+ },
+ "marcio.sonho_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_1"
+   }
+  ]
+ },
+ "marcio.sonho_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_1_eco"
+   }
+  ]
+ },
+ "marcio.sonho_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_2"
+   }
+  ]
+ },
+ "marcio.sonho_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_2_eco"
+   }
+  ]
+ },
+ "marcio.sonho_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_3"
+   }
+  ]
+ },
+ "marcio.sonho_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_3_eco"
+   }
+  ]
+ },
+ "marcio.sonho_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_4"
+   }
+  ]
+ },
+ "marcio.sonho_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_4_eco"
+   }
+  ]
+ },
+ "marcio.sonho_5": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_5"
+   }
+  ]
+ },
+ "marcio.sonho_5_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_5_eco"
+   }
+  ]
+ },
+ "marcio.sonho_6": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_6"
+   }
+  ]
+ },
+ "marcio.sonho_6_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/sonho_6_eco"
+   }
+  ]
+ },
+ "marcio.vazio_1": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_1"
+   }
+  ]
+ },
+ "marcio.vazio_1_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_1_eco"
+   }
+  ]
+ },
+ "marcio.vazio_2": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_2"
+   }
+  ]
+ },
+ "marcio.vazio_2_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_2_eco"
+   }
+  ]
+ },
+ "marcio.vazio_3": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_3"
+   }
+  ]
+ },
+ "marcio.vazio_3_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_3_eco"
+   }
+  ]
+ },
+ "marcio.vazio_4": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_4"
+   }
+  ]
+ },
+ "marcio.vazio_4_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_4_eco"
+   }
+  ]
+ },
+ "marcio.vazio_5": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_5"
+   }
+  ]
+ },
+ "marcio.vazio_5_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_5_eco"
+   }
+  ]
+ },
+ "marcio.vazio_6": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_6"
+   }
+  ]
+ },
+ "marcio.vazio_6_eco": {
+  "sounds": [
+   {
+    "name": "bauchefe:marcio/vazio_6_eco"
+   }
+  ]
+ }
+}

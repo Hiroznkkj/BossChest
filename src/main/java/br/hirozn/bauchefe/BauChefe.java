@@ -43,6 +43,7 @@ import java.util.List;
 
 public class BauChefe implements ModInitializer {
 	public static final String MODID = "bauchefe";
+	public static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(MODID);
 
 	public static Identifier id(String path) { return Identifier.fromNamespaceAndPath(MODID, path); }
 

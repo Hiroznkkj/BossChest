@@ -57,11 +57,11 @@ public final class Pacotes {
 		@Override public Type<Estoque> type() { return TYPE; }
 	}
 
-	/** Servidor -> PC: o Márcio (id da entidade) falou; o PC desenha o balão. */
-	public record Fala(int villager, String texto) implements CustomPacketPayload {
+	/** Servidor -> PC: o Márcio (id da entidade) falou; o PC desenha o balão e toca a voz ('som' vazio = sem áudio). */
+	public record Fala(int villager, String texto, String som) implements CustomPacketPayload {
 		public static final Type<Fala> TYPE = tipo("fala");
 		public static final StreamCodec<ByteBuf, Fala> CODEC = StreamCodec.composite(
-				ByteBufCodecs.VAR_INT, Fala::villager, ByteBufCodecs.STRING_UTF8, Fala::texto, Fala::new);
+				ByteBufCodecs.VAR_INT, Fala::villager, ByteBufCodecs.STRING_UTF8, Fala::texto, ByteBufCodecs.STRING_UTF8, Fala::som, Fala::new);
 		@Override public Type<Fala> type() { return TYPE; }
 	}
 

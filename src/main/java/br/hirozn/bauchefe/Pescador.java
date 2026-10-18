@@ -510,8 +510,10 @@ public final class Pescador {
 		}
 		// de vez em quando: piada, brincadeira com o Pinto ou bobagem de bêbado
 		if (relogio % 200 == 0 && r.nextFloat() < 0.3f && v.getVehicle() instanceof AbstractBoat b) {
+			float f = r.nextFloat();
 			Falas.Tipo tipo = s.bebado && r.nextBoolean() ? Falas.Tipo.BEBADO
-					: b.hasPassenger(Pescador::ehPinto) && r.nextFloat() < 0.4f ? Falas.Tipo.PINTO : Falas.Tipo.PIADA;
+					: f < 0.1f ? Falas.Tipo.CANCAO // canta um pedacinho
+					: f < 0.45f && b.hasPassenger(Pescador::ehPinto) ? Falas.Tipo.PINTO : Falas.Tipo.PIADA;
 			falar(level, v, s, tipo, null, false);
 		}
 	}
@@ -523,7 +525,8 @@ public final class Pescador {
 	private static boolean falar(ServerLevel level, Villager v, Estado s, Falas.Tipo tipo, String nome, boolean forcar) {
 		if (!forcar && relogio < s.proximaFala) return false;
 		if (level.getNearestPlayer(v, 32) == null) return false;
-		Pacotes.Fala fala = new Pacotes.Fala(v.getId(), Falas.balao(Falas.frase(tipo, level.getRandom(), nome)));
+		Falas.Linha l = Falas.frase(tipo, level.getRandom(), nome);
+		Pacotes.Fala fala = new Pacotes.Fala(v.getId(), Falas.balao(l.texto()), l.som() == null ? "" : l.som());
 		for (ServerPlayer p : PlayerLookup.tracking(v)) ServerPlayNetworking.send(p, fala);
 		s.proximaFala = relogio + 800 + level.getRandom().nextInt(1000);
 		return true;

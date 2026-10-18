@@ -6,6 +6,10 @@ import br.hirozn.bauchefe.Asas;
 import br.hirozn.bauchefe.Boia;
 import br.hirozn.bauchefe.Pescador;
 import br.hirozn.bauchefe.net.Pacotes;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import br.hirozn.bauchefe.BauChefe;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
@@ -15,11 +19,17 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.Villager;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /** Estado do Márcio no cliente: falas e animações recebidas do servidor e as piscadas. */
 public final class MarcioCliente {
 	public static final int DUR_FALA = 80;
 
-	private record Fala(String texto, long inicio) {}
+	private record Fala(String[] palavras, float[] tempos, long inicio, int duracao) {}
+	/** Tempo de cada palavra nos áudios (assets/bauchefe/marcio_falas.json, gerado a partir da transcrição). */
+	private record Tempos(String[] palavras, float[] tempos, float duracao) {}
+	private static Map<String, Tempos> tempos;
 	private record Anim(int id, long inicio) {}
 
 	private static final Int2ObjectMap<Fala> falas = new Int2ObjectOpenHashMap<>();
@@ -34,7 +44,39 @@ public final class MarcioCliente {
 		return mc.level == null ? 0 : mc.level.getGameTime();
 	}
 
-	public static void fala(Pacotes.Fala p) { falas.put(p.villager(), new Fala(p.texto(), agora())); }
+	public static void fala(Pacotes.Fala p) {
+		Tempos t = p.som().isEmpty() ? null : tempos().get(p.som());
+		if (t != null) falas.put(p.villager(), new Fala(t.palavras(), t.tempos(), agora(), Math.max(DUR_FALA, (int) (t.duracao() * 20) + 30)));
+		else falas.put(p.villager(), new Fala(p.texto().split(" "), null, agora(), DUR_FALA));
+		Minecraft mc = Minecraft.getInstance();
+		Entity v = mc.level == null ? null : mc.level.getEntity(p.villager());
+		if (v != null && !p.som().isEmpty()) MarcioSom.tocar(v, p.som());
+	}
+
+	private static Map<String, Tempos> tempos() {
+		if (tempos != null) return tempos;
+		tempos = new HashMap<>();
+		try {
+			var res = Minecraft.getInstance().getResourceManager().getResource(BauChefe.id("marcio_falas.json"));
+			if (res.isEmpty()) return tempos;
+			try (var leitor = res.get().openAsReader()) {
+				for (var e : JsonParser.parseReader(leitor).getAsJsonObject().entrySet()) {
+					JsonObject o = e.getValue().getAsJsonObject();
+					JsonArray ps = o.getAsJsonArray("palavras");
+					String[] pal = new String[ps.size()];
+					float[] tem = new float[ps.size()];
+					for (int i = 0; i < ps.size(); i++) {
+						pal[i] = ps.get(i).getAsJsonArray().get(0).getAsString();
+						tem[i] = ps.get(i).getAsJsonArray().get(1).getAsFloat();
+					}
+					tempos.put(e.getKey(), new Tempos(pal, tem, o.get("duracao").getAsFloat()));
+				}
+			}
+		} catch (Exception e) {
+			BauChefe.LOG.warn("[Baú Chefe] Não deu para ler os tempos das falas do Márcio", e);
+		}
+		return tempos;
+	}
 
 	public static void anim(Pacotes.Anim p) {
 		long t = agora();
@@ -65,11 +107,13 @@ public final class MarcioCliente {
 		d.animTempo = a == null ? 0 : t - a.inicio();
 
 		Fala f = falas.get(id);
-		if (f != null && t - f.inicio() > DUR_FALA) { falas.remove(id); f = null; }
-		d.fala = f == null ? null : f.texto();
+		if (f != null && t - f.inicio() > f.duracao()) { falas.remove(id); f = null; }
+		d.fala = f == null ? null : f.palavras();
 		if (f != null) {
 			float e = t - f.inicio();
-			d.falaAlpha = Mth.clamp(Math.min(e / 4f, (DUR_FALA - e) / 10f), 0f, 1f); // aparece rápido, some devagar
+			d.falaTempos = f.tempos();
+			d.falaSeg = e / 20f;
+			d.falaAlpha = Mth.clamp(Math.min(e / 4f, (f.duracao() - e) / 10f), 0f, 1f); // aparece rápido, some devagar
 		}
 
 		// pupilas seguem o olhar da cabeça, com pequenas mexidas (microssacadas)

@@ -7,7 +7,8 @@ public class DadosMarcio {
 	public float tempo, animTempo, rFase; // ticks desde o início de cada uma; fase aleatória fixa do villager
 	// olhos: deslocamento das pupilas (pixels) e pálpebra (0 aberto, 1 fechado)
 	public float pupilaX, pupilaY, palpebra, distancia;
-	// balão
-	public String fala;
-	public float falaAlpha;
+	// balão: palavras, quando cada uma é dita (s; null = sem áudio) e quanto tempo já passou (s)
+	public String[] fala;
+	public float[] falaTempos;
+	public float falaSeg, falaAlpha;
 }
