@@ -22,7 +22,7 @@ public abstract class CrossedArmsItemLayerMixin {
 	@Inject(method = "applyTranslation", at = @At("HEAD"), cancellable = true)
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	private void bauchefe$varaNaMao(HoldingEntityRenderState st, PoseStack pose, CallbackInfo ci) {
-		if (!(st instanceof VillagerRenderState vs) || !((EstadoPescador) vs).bauchefe$pescador()) return;
+		if (!(st instanceof VillagerRenderState vs) || !((EstadoPescador) vs).bauchefe$dados().pescador) return;
 		EntityModel model = ((CrossedArmsItemLayer) (Object) this).getParentModel();
 		((VillagerLikeModel) model).translateToArms(st, pose);
 		pose.translate(-5 / 16f, 0f, 0f); // do centro do "arms" até o braço direito

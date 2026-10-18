@@ -77,6 +77,8 @@ public class BauChefe implements ModInitializer {
 		PayloadTypeRegistry.serverboundPlay().register(Pacotes.Sacar.TYPE, Pacotes.Sacar.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(Pacotes.Guardar.TYPE, Pacotes.Guardar.CODEC);
 		PayloadTypeRegistry.clientboundPlay().registerLarge(Pacotes.Estoque.TYPE, Pacotes.Estoque.CODEC, 8 << 20);
+		PayloadTypeRegistry.clientboundPlay().register(Pacotes.Fala.TYPE, Pacotes.Fala.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(Pacotes.Anim.TYPE, Pacotes.Anim.CODEC);
 
 		// /bauchefe abrir: mesmo efeito do Shift+V (útil sem teclado ou em comandos)
 		CommandRegistrationCallback.EVENT.register((d, reg, env) -> d.register(Commands.literal("bauchefe")

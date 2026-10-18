@@ -56,4 +56,20 @@ public final class Pacotes {
 				Estoque::new);
 		@Override public Type<Estoque> type() { return TYPE; }
 	}
+
+	/** Servidor -> PC: o Márcio (id da entidade) falou; o PC desenha o balão. */
+	public record Fala(int villager, String texto) implements CustomPacketPayload {
+		public static final Type<Fala> TYPE = tipo("fala");
+		public static final StreamCodec<ByteBuf, Fala> CODEC = StreamCodec.composite(
+				ByteBufCodecs.VAR_INT, Fala::villager, ByteBufCodecs.STRING_UTF8, Fala::texto, Fala::new);
+		@Override public Type<Fala> type() { return TYPE; }
+	}
+
+	/** Servidor -> PC: o Márcio começou uma animação especial (AnimMarcio). */
+	public record Anim(int villager, int anim) implements CustomPacketPayload {
+		public static final Type<Anim> TYPE = tipo("anim");
+		public static final StreamCodec<ByteBuf, Anim> CODEC = StreamCodec.composite(
+				ByteBufCodecs.VAR_INT, Anim::villager, ByteBufCodecs.VAR_INT, Anim::anim, Anim::new);
+		@Override public Type<Anim> type() { return TYPE; }
+	}
 }

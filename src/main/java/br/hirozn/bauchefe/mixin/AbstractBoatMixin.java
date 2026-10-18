@@ -4,6 +4,7 @@ import br.hirozn.bauchefe.Pescador;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.animal.chicken.Chicken;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,11 +27,12 @@ public abstract class AbstractBoatMixin {
 		else if (self.getPassengers().size() > 1) cir.setReturnValue(new Vec3(0, cir.getReturnValue().y, 0.15).yRot(rad));
 	}
 
-	// o segundo passageiro só pode ser a galinha ou o pescador (o barco puxa bichos que encostam nele)
+	// o segundo passageiro só pode ser a galinha, o pescador ou um jogador "roubando" (o barco puxa bichos que encostam nele)
 	@Inject(method = "canAddPassenger", at = @At("HEAD"), cancellable = true)
 	private void bauchefe$soGalinha(Entity passenger, CallbackInfoReturnable<Boolean> cir) {
 		AbstractBoat self = (AbstractBoat) (Object) this;
-		if (self.getPassengers().size() == 1 && Pescador.barcoDoMarcio(self) && !(passenger instanceof Chicken || Pescador.ehPescador(passenger)))
+		if (self.getPassengers().size() == 1 && Pescador.barcoDoMarcio(self)
+				&& !(passenger instanceof Chicken || passenger instanceof Player || Pescador.ehPescador(passenger)))
 			cir.setReturnValue(false);
 	}
 
