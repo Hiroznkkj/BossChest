@@ -6,30 +6,31 @@ import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.util.Mth;
 
 /**
- * Pose do Márcio por cima da pose vanilla: braços da pesca, respiração, balanço no barco,
- * pernas sentadas e as animações especiais. Inspirado no estilo do Fresh Animations (FreshLX):
- * movimentos pequenos e contínuos, fase aleatória por entidade e tudo misturado com easing.
- * Braço direito segura a vara; o esquerdo fica livre (apoio, aceno, carinho no Pinto).
- * zRot positivo abre o braço direito para fora; no esquerdo é negativo.
+ * Pose do Márcio por cima da pose humanoide vanilla: pesca, briga com peixe difícil (em pé),
+ * nado, respiração, balanço no barco e as animações especiais. Inspirado no estilo do Fresh Animations
+ * (FreshLX): movimentos pequenos e contínuos, fase aleatória por entidade e tudo misturado com easing.
+ * Braço direito segura a vara; o esquerdo fica livre. zRot positivo abre o braço direito; no esquerdo é negativo.
  */
 public final class PoseMarcio {
-	/** Nomes dos dois braços que o VillagerMeshMixin acrescenta ao modelo. */
-	public static final String BRACO_D = "bauchefe_braco_direito", BRACO_E = "bauchefe_braco_esquerdo";
-
 	private PoseMarcio() {}
 
 	public static void aplicar(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart body,
-	                           ModelPart dir, ModelPart esq, ModelPart rightLeg, ModelPart leftLeg) {
+	                           ModelPart dir, ModelPart esq, ModelPart pernaD, ModelPart pernaE) {
 		float r = d.rFase;
 		float resp = Mth.sin(age * 0.09f + r); // respiração, ~3,5 s
+		boolean pescando = d.fase != AnimPesca.NADA;
 
-		// braço direito: pesca (arremesso, espera, mordida, puxada)
-		dir.xRot = AnimPesca.braco(d.fase, d.tempo);
-		dir.zRot = 0.06f + 0.02f * resp;
-		// braço esquerdo: apoiado no joelho quando sentado, solto ao lado do corpo em pé; ajuda a puxar o peixe
-		float puxa = d.fase == AnimPesca.PUXANDO || d.fase == AnimPesca.MORDIDA ? (dir.xRot - (-0.35f)) * 0.45f : 0f;
-		esq.xRot = (d.sentado ? -0.55f : -0.1f) + puxa + 0.04f * Mth.sin(age * 0.06f + r * 1.7f);
-		esq.zRot = -0.06f - 0.02f * resp;
+		// braço direito: pesca; fora dela, no barco, segura a vara apontada para a frente
+		if (d.sentado || pescando) {
+			dir.xRot = AnimPesca.braco(d.fase, d.tempo);
+			dir.yRot = 0f;
+			dir.zRot = 0.06f + 0.02f * resp;
+			// esquerdo apoiado no joelho; ajuda a puxar na mordida e na puxada
+			float puxa = d.fase == AnimPesca.PUXANDO || d.fase == AnimPesca.MORDIDA ? (dir.xRot + 0.35f) * 0.45f : 0f;
+			esq.xRot = -0.55f + puxa + 0.04f * Mth.sin(age * 0.06f + r * 1.7f);
+			esq.yRot = 0f;
+			esq.zRot = -0.06f - 0.02f * resp;
+		}
 
 		// respiração: o peito enche de leve, ombros e cabeça acompanham
 		body.zScale = 1f + 0.03f * resp;
@@ -40,9 +41,6 @@ public final class PoseMarcio {
 		head.zRot += 0.02f * Mth.sin(age * 0.05f + r * 2f); // inclina a cabeça de leve, à toa
 
 		if (d.sentado) {
-			// sentado no barco, joelhos para a frente
-			rightLeg.xRot = -1.4f; rightLeg.yRot = 0.3f;
-			leftLeg.xRot = -1.4f; leftLeg.yRot = -0.3f;
 			// balanço junto com o barco, girando em torno do assento (12 px abaixo do pivô do root)
 			float bz = 0.035f * Mth.sin(age * 0.07f + r), bx = 0.02f * Mth.sin(age * 0.05f + r * 1.3f);
 			root.zRot += bz;
@@ -52,6 +50,53 @@ public final class PoseMarcio {
 			root.z -= 12f * Mth.sin(bx);
 		}
 
+		emPe(d, age, root, head, body, esq, pernaD, pernaE);
+		nadar(d, age, root, head, dir, esq, pernaD, pernaE);
+		especial(d, head, body, dir, esq);
+	}
+
+	/** Peixe difícil: levanta no barco, pernas abertas, corpo para trás puxando a vara com as duas mãos. */
+	private static void emPe(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart body,
+	                         ModelPart esq, ModelPart pernaD, ModelPart pernaE) {
+		float w = d.fase == AnimPesca.LUTA ? AnimPesca.inOutSine(d.tempo / 10f)
+				: d.fase == AnimPesca.PUXANDO && d.lutou ? 1f - AnimPesca.inOutSine(d.tempo / AnimPesca.DUR_PUXANDO) : 0f;
+		if (w <= 0) return;
+		float luta = d.fase == AnimPesca.LUTA ? AnimPesca.luta(d.tempo) : 0f, t = d.tempo;
+		root.y -= 7f * w; // fica de pé (sobe do assento)
+		pernaD.xRot = Mth.lerp(w, pernaD.xRot, 0.05f);
+		pernaD.yRot = Mth.lerp(w, pernaD.yRot, 0.1f);
+		pernaD.zRot = Mth.lerp(w, pernaD.zRot, 0.12f);
+		pernaE.xRot = Mth.lerp(w, pernaE.xRot, -0.15f);
+		pernaE.yRot = Mth.lerp(w, pernaE.yRot, -0.1f);
+		pernaE.zRot = Mth.lerp(w, pernaE.zRot, -0.12f);
+		// as duas mãos na vara, o corpo cede e puxa junto com o peixe
+		float tranco = Mth.sin(t * 0.55f);
+		body.xRot = Mth.lerp(w, body.xRot, -0.12f - 0.08f * tranco * luta);
+		head.xRot = Mth.lerp(w, head.xRot, 0.2f + 0.05f * Mth.sin(t * 1.1f) * luta);
+		if (luta > 0) {
+			esq.xRot = Mth.lerp(luta, esq.xRot, -1.5f + 0.35f * tranco);
+			esq.yRot = Mth.lerp(luta, esq.yRot, 0.45f);
+			esq.zRot = Mth.lerp(luta, esq.zRot, 0f);
+		}
+	}
+
+	/** Nado de cachorrinho: braços em círculo alternados, pernas batendo, cabeça para fora da água. */
+	private static void nadar(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq,
+	                          ModelPart pernaD, ModelPart pernaE) {
+		float n = d.nado;
+		if (n <= 0) return;
+		float c = age * 0.33f;
+		dir.xRot = Mth.lerp(n, dir.xRot, -2.3f + 0.9f * Mth.sin(c));
+		dir.zRot = Mth.lerp(n, dir.zRot, 0.25f + 0.2f * Mth.cos(c));
+		esq.xRot = Mth.lerp(n, esq.xRot, -2.3f + 0.9f * Mth.sin(c + Mth.PI));
+		esq.zRot = Mth.lerp(n, esq.zRot, -0.25f - 0.2f * Mth.cos(c + Mth.PI));
+		pernaD.xRot = Mth.lerp(n, pernaD.xRot, 0.5f * Mth.sin(age * 0.5f));
+		pernaE.xRot = Mth.lerp(n, pernaE.xRot, 0.5f * Mth.sin(age * 0.5f + Mth.PI));
+		head.xRot = Mth.lerp(n, head.xRot, -0.35f);
+		root.y += n * 1.2f * Mth.sin(c * 2f); // sobe e desce com as braçadas
+	}
+
+	private static void especial(DadosMarcio d, ModelPart head, ModelPart body, ModelPart dir, ModelPart esq) {
 		float w = AnimMarcio.peso(d.anim, d.animTempo);
 		if (w <= 0) return;
 		float t = d.animTempo, u = t / AnimMarcio.duracao(d.anim);
@@ -82,8 +127,8 @@ public final class PoseMarcio {
 				body.yRot = Mth.lerp(w, body.yRot, 0.15f * Mth.sin(t * 0.45f));
 			}
 			case AnimMarcio.CARINHO -> {
-				// vira para trás (o Pinto fica no baú) e faz carinho com a mão esquerda
-				misturar(esq, 0.9f + 0.15f * Mth.sin(t * 0.9f), 0.3f, -0.45f, w);
+				// vira para trás (o Pinto fica no baú) e afaga a cabeça dele com a mão esquerda
+				misturar(esq, 1.1f + 0.15f * Mth.sin(t * 0.9f), 0.35f, -0.5f, w);
 				body.yRot = Mth.lerp(w, body.yRot, -0.15f); // pouco: os braços não giram junto com o tronco
 				head.xRot = Mth.lerp(w, head.xRot, 0.25f);
 			}

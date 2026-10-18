@@ -9,8 +9,10 @@ import net.minecraft.world.phys.Vec3;
  * (ângulo dos braços, ponta da vara e trajetória da boia). Tempo em ticks, com fração.
  */
 public final class AnimPesca {
-	public static final int NADA = 0, PREPARA = 1, VOO = 2, BOIANDO = 3, MORDIDA = 4, PUXANDO = 5;
+	public static final int NADA = 0, PREPARA = 1, VOO = 2, BOIANDO = 3, MORDIDA = 4, PUXANDO = 5, LUTA = 6;
 	public static final int DUR_PREPARA = 10, DUR_VOO = 12, DUR_MORDIDA = 14, DUR_PUXANDO = 18;
+	/** Peixe difícil: briga de 4,5 s entre a mordida e a puxada (ele fica de pé e o barco balança). */
+	public static final int DUR_LUTA = 90;
 	/** Em VOO a boia sai da vara neste tick e chega na água no fim da fase. */
 	public static final int SOLTA = 3;
 	/** Em PUXANDO a boia volta até a vara nestes ticks. */
@@ -52,8 +54,14 @@ public final class AnimPesca {
 			case PUXANDO -> t < 5
 					? Mth.lerp(outCubic(t / 5), SEGURANDO, PUXADO) // puxa para cima
 					: Mth.lerp(inOutCubic((t - 5) / (DUR_PUXANDO - 5)), PUXADO, DESCANSO);
+			case LUTA -> Mth.lerp(luta(t), SEGURANDO, -1.7f + 0.35f * Mth.sin(t * 0.55f) + 0.1f * Mth.sin(t * 1.7f)); // puxa e cede
 			default -> DESCANSO;
 		};
+	}
+
+	/** Intensidade da briga: entra em 8 ticks e sai nos últimos 10 (a puxada começa da pose normal). */
+	public static float luta(float t) {
+		return inOutSine(Math.min(1f, Math.min(t / 8f, (DUR_LUTA - t) / 10f)));
 	}
 
 	// ---------- ponta da vara ----------

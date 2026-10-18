@@ -8,9 +8,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityRenderLayerRegistrationCallback;
 import net.minecraft.client.renderer.entity.EntityRenderers;
-import net.minecraft.client.renderer.entity.VillagerRenderer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -24,10 +22,6 @@ public class BauChefeClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		KeyMappingHelper.registerKeyMapping(ABRIR);
 		EntityRenderers.register(BauChefe.BOIA, BoiaRenderer::new);
-		// olhos vivos do pescador
-		LivingEntityRenderLayerRegistrationCallback.EVENT.register((tipo, renderer, ajuda, ctx) -> {
-			if (renderer instanceof VillagerRenderer vr) ajuda.register(new OlhosLayer(vr));
-		});
 		ClientPlayNetworking.registerGlobalReceiver(Pacotes.Fala.TYPE, (p, ctx) -> MarcioCliente.fala(p));
 		ClientPlayNetworking.registerGlobalReceiver(Pacotes.Anim.TYPE, (p, ctx) -> MarcioCliente.anim(p));
 		Atualizador.iniciar();

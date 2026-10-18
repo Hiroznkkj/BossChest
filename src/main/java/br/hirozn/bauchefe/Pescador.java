@@ -66,7 +66,7 @@ public final class Pescador {
 		// pesca
 		Boia boia;
 		int faseT;
-		boolean fisgou;
+		boolean fisgou, dificil;
 		// noite
 		UUID barco;
 		BlockPos doca; // onde ele pisa na doca
@@ -207,18 +207,28 @@ public final class Pescador {
 		Vec3 pos = barco.position();
 		if (relogio - s.remouEm > 1) s.ultimaPos = pos; // voltou a remar depois de parar: não é encalhe
 		s.remouEm = relogio;
-		// passa pelos pontos que já ficaram para trás; numa curva só passa bem no meio do bloco
+		// chegou perto do destino: pronto
+		BlockPos fim = s.caminho.get(s.caminho.size() - 1);
+		if (Math.pow(fim.getX() + 0.5 - pos.x, 2) + Math.pow(fim.getZ() + 0.5 - pos.z, 2) < 1.2) {
+			s.idx = s.caminho.size();
+			return false;
+		}
+		// se já está mais perto de um ponto adiante, pula para ele
+		int perto = s.idx;
+		double menor = Double.MAX_VALUE;
+		for (int k = s.idx; k < Math.min(s.caminho.size(), s.idx + 6); k++) {
+			BlockPos c = s.caminho.get(k);
+			double d = Math.pow(c.getX() + 0.5 - pos.x, 2) + Math.pow(c.getZ() + 0.5 - pos.z, 2);
+			if (d < menor) { menor = d; perto = k; }
+		}
+		s.idx = perto;
+		// passa pelos pontos que já ficaram para trás; numa curva só passa perto do meio do bloco
 		// (a caixa do barco não gira, então ele precisa estar centrado para caber no canal novo)
 		while (s.idx < s.caminho.size() - 1) {
 			BlockPos c = s.caminho.get(s.idx);
-			double raio = curva(s.caminho, s.idx) ? 0.45 : 1.4;
+			double raio = curva(s.caminho, s.idx) ? 0.7 : 1.4;
 			if (Math.pow(c.getX() + 0.5 - pos.x, 2) + Math.pow(c.getZ() + 0.5 - pos.z, 2) >= raio * raio) break;
 			s.idx++;
-		}
-		BlockPos fim = s.caminho.get(s.caminho.size() - 1);
-		if (s.idx == s.caminho.size() - 1 && Math.pow(fim.getX() + 0.5 - pos.x, 2) + Math.pow(fim.getZ() + 0.5 - pos.z, 2) < 1.2) {
-			s.idx = s.caminho.size();
-			return false;
 		}
 		BlockPos alvo = s.caminho.get(s.idx);
 		for (int k = s.idx + 1; k < s.caminho.size(); k++) {
@@ -361,6 +371,7 @@ public final class Pescador {
 				if (s.timer <= 0) {
 					mudar(s, AnimPesca.MORDIDA);
 					s.fisgou = r.nextFloat() < 0.7f;
+					s.dificil = s.fisgou && r.nextFloat() < 0.25f; // às vezes o peixe briga
 					level.playSound(null, b.x, b.y, b.z, SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.35f, 1 + (r.nextFloat() - r.nextFloat()) * 0.4f);
 					level.sendParticles(ParticleTypes.SPLASH, b.x, b.y + 0.1, b.z, 12, 0.2, 0, 0.2, 0.1);
 					level.sendParticles(ParticleTypes.BUBBLE, b.x, b.y - 0.2, b.z, 8, 0.2, 0.1, 0.2, 0.1);
@@ -368,13 +379,27 @@ public final class Pescador {
 			}
 			case AnimPesca.MORDIDA -> {
 				if (s.faseT % 4 == 0) level.sendParticles(ParticleTypes.SPLASH, b.x, b.y + 0.1, b.z, 3, 0.1, 0, 0.1, 0.05);
-				if (s.faseT >= AnimPesca.DUR_MORDIDA) {
+				if (s.faseT >= AnimPesca.DUR_MORDIDA && s.dificil) {
+					mudar(s, AnimPesca.LUTA);
+				} else if (s.faseT >= AnimPesca.DUR_MORDIDA) {
 					mudar(s, AnimPesca.PUXANDO);
 					level.playSound(null, v.getX(), v.getY(), v.getZ(), SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.NEUTRAL, 0.5f, 1f);
 					if (s.fisgou) {
-						boolean raro = peixeVoando(level, barco, b, r);
+						boolean raro = peixeVoando(level, barco, b, r, false);
 						falar(level, v, s, raro ? Falas.Tipo.RARO : Falas.Tipo.PEIXE, null, false);
 					} else falar(level, v, s, Falas.Tipo.VAZIO, null, false);
+				}
+			}
+			case AnimPesca.LUTA -> {
+				// o peixe briga: respingos e a linha estalando; depois puxa (peixe difícil costuma ser raro)
+				frear(barco, 0.3);
+				if (s.faseT % 6 == 0) level.sendParticles(ParticleTypes.SPLASH, b.x, b.y + 0.1, b.z, 6, 0.3, 0, 0.3, 0.1);
+				if (s.faseT % 25 == 0) level.playSound(null, b.x, b.y, b.z, SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.3f, 0.8f + r.nextFloat() * 0.4f);
+				if (s.faseT >= AnimPesca.DUR_LUTA) {
+					mudar(s, AnimPesca.PUXANDO);
+					level.playSound(null, v.getX(), v.getY(), v.getZ(), SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.NEUTRAL, 0.6f, 0.8f);
+					boolean raro = peixeVoando(level, barco, b, r, true);
+					falar(level, v, s, raro ? Falas.Tipo.RARO : Falas.Tipo.PEIXE, null, false);
 				}
 			}
 			case AnimPesca.PUXANDO -> {
@@ -391,8 +416,8 @@ public final class Pescador {
 	}
 
 	/** O peixe salta da água até o barco (só visual) e vai para o baú. Devolve true se for raro. */
-	private static boolean peixeVoando(ServerLevel level, AbstractBoat barco, Vec3 de, RandomSource r) {
-		ItemStack peixe = peixeAleatorio(r);
+	private static boolean peixeVoando(ServerLevel level, AbstractBoat barco, Vec3 de, RandomSource r, boolean dificil) {
+		ItemStack peixe = dificil && r.nextBoolean() ? new ItemStack(r.nextBoolean() ? Items.PUFFERFISH : Items.TROPICAL_FISH) : peixeAleatorio(r);
 		if (barco instanceof AbstractChestBoat bau) guardar(bau, peixe.copy());
 		ItemEntity ie = new ItemEntity(level, de.x, de.y + 0.2, de.z, peixe);
 		// lançamento balístico (gravidade 0.04 e arrasto 0.98 do ItemEntity) para cair no baú

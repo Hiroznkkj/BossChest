@@ -36,10 +36,10 @@ public abstract class AbstractBoatMixin {
 			cir.setReturnValue(false);
 	}
 
-	// a galinha olha para a frente, e não de lado como os bichos no barco cheio
+	// a galinha fica virada para trás (olhando a água atrás do barco), e não de lado como os bichos no barco cheio
 	@Inject(method = "calculatePassengerBodyYRot", at = @At("HEAD"), cancellable = true)
 	private void bauchefe$galinhaPraFrente(Entity passenger, CallbackInfoReturnable<Float> cir) {
 		AbstractBoat self = (AbstractBoat) (Object) this;
-		if (passenger instanceof Chicken && Pescador.barcoDoMarcio(self)) cir.setReturnValue(self.getYRot());
+		if (passenger instanceof Chicken && Pescador.barcoDoMarcio(self)) cir.setReturnValue(self.getYRot() + 180f);
 	}
 }

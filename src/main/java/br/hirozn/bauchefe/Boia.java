@@ -30,7 +30,7 @@ public class Boia extends Entity {
 	// cliente: fase local e posição visual (a entidade em si fica parada no ponto da água)
 	private int faseCli = AnimPesca.NADA, inicioCli;
 	private Vec3 vis, visO, deFase, lancada;
-	private boolean visivel, visivelO;
+	private boolean visivel, visivelO, lutou;
 
 	public Boia(EntityType<? extends Boia> type, Level level) {
 		super(type, level);
@@ -66,6 +66,7 @@ public class Boia extends Entity {
 
 	private void mudouFase() {
 		faseCli = getFase();
+		if (faseCli == AnimPesca.LUTA) lutou = true;
 		inicioCli = tickCount;
 		deFase = vis;
 	}
@@ -73,6 +74,8 @@ public class Boia extends Entity {
 	/** Ticks desde que a fase atual chegou no cliente. */
 	public float tempoFase(float partial) { return tickCount - inicioCli + partial; }
 	public int faseCliente() { return faseCli; }
+	/** Essa pesca teve briga com o peixe (para ele sentar de novo durante a puxada). */
+	public boolean lutou() { return lutou; }
 
 	@Override
 	public void tick() {
@@ -111,6 +114,13 @@ public class Boia extends Entity {
 				// afunda de uma vez e treme enquanto o peixe puxa
 				double y = -0.32 * AnimPesca.outCubic(t / 3f) + 0.06 * Math.sin(t * 1.8);
 				vis = suavizar(agua.add(0, y, 0), t, 2);
+				visivel = true;
+			}
+			case AnimPesca.LUTA -> {
+				// o peixe arrasta a boia para os lados, meio afundada
+				float w = AnimPesca.luta(t);
+				double lado = (0.5 * Math.sin(t * 0.23) + 0.25 * Math.sin(t * 0.61)) * w, frente = 0.35 * Math.sin(t * 0.17 + 1) * w;
+				vis = suavizar(agua.add(lado, -0.3 + 0.06 * Math.sin(t * 1.3), frente), t, 3);
 				visivel = true;
 			}
 			case AnimPesca.PUXANDO -> {

@@ -37,10 +37,12 @@ public class MarcioSom extends AbstractTickableSoundInstance {
 		atualizar();
 	}
 
-	public static void tocar(Entity quem, String som) {
+	/** Toca a fala (normal + eco) e devolve as duas instâncias, para poder parar depois. */
+	public static MarcioSom[] tocar(Entity quem, String som) {
 		var sm = Minecraft.getInstance().getSoundManager();
-		sm.play(new MarcioSom(quem, som, false));
-		sm.play(new MarcioSom(quem, som, true));
+		MarcioSom[] par = {new MarcioSom(quem, som, false), new MarcioSom(quem, som, true)};
+		for (MarcioSom m : par) sm.play(m);
+		return par;
 	}
 
 	@Override
