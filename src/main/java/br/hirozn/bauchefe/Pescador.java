@@ -638,7 +638,7 @@ public final class Pescador {
 		if (barco == null) return s.voltando <= 2400;
 		double d = v.distanceToSqr(barco);
 		// perto do barco embarca; se ficar enroscado por 2 min, embarca de qualquer jeito
-		if (d < 2.5 * 2.5 || (s.voltando > 2400 && d < 32 * 32)) { embarcar(level, v, barco, s); return true; }
+		if (d < 4.0 * 4.0 || (s.voltando > 2400 && d < 32 * 32)) { embarcar(level, v, barco, s); return true; } // da doca ele alcança o barco
 		if (s.voltando % 10 == 1) {
 			BlockPos alvo = s.doca != null ? s.doca : barco.blockPosition();
 			v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(alvo, 0.6f, 0));
