@@ -17,6 +17,7 @@ public class MarcioRenderer extends HumanoidMobRenderer<Villager, MarcioRenderSt
 	public MarcioRenderer(EntityRendererProvider.Context ctx) {
 		super(ctx, new MarcioModel(ctx.bakeLayer(ModelLayers.PLAYER)), 0.5f);
 		addLayer(new Camada3D(this));
+		addLayer(new OlhosMarcio(this));
 	}
 
 	@Override

@@ -40,39 +40,56 @@ public final class PoseMarcio {
 		head.y -= 0.12f * resp;
 		head.zRot += 0.02f * Mth.sin(age * 0.05f + r * 2f); // inclina a cabeça de leve, à toa
 
-		if (d.sentado) {
-			// balanço junto com o barco, girando em torno do assento (12 px abaixo do pivô do root)
-			float bz = 0.035f * Mth.sin(age * 0.07f + r), bx = 0.02f * Mth.sin(age * 0.05f + r * 1.3f);
-			root.zRot += bz;
-			root.xRot += bx;
-			root.x += 12f * Mth.sin(bz);
-			root.y += 12f * (1f - Mth.cos(bz)) + 12f * (1f - Mth.cos(bx));
-			root.z -= 12f * Mth.sin(bx);
-		}
+		if (d.sentado) levantar(d, age, r, root, head, body, dir, esq, pernaD, pernaE);
 
 		emPe(d, age, root, head, body, esq, pernaD, pernaE);
 		nadar(d, age, root, head, dir, esq, pernaD, pernaE);
-		especial(d, head, body, dir, esq);
+		especial(d, root, head, body, dir, esq, pernaD, pernaE);
 	}
 
-	/** Peixe difícil: levanta no barco, pernas abertas, corpo para trás puxando a vara com as duas mãos. */
+	/**
+	 * Sentar e levantar no barco. 'pe' vai de 0 (sentado) a 1 (em pé). As pernas giram da horizontal para a
+	 * vertical e o quadril sobe junto com elas, de um jeito que os pés ficam no chão do barco (a altura sai do
+	 * ângulo da perna, AnimPesca.alturaAssento). No meio do movimento o corpo e a cabeça vão para a frente e os
+	 * braços acompanham, como quem pega impulso.
+	 */
+	private static void levantar(DadosMarcio d, float age, float r, ModelPart root, ModelPart head, ModelPart body,
+	                             ModelPart dir, ModelPart esq, ModelPart pernaD, ModelPart pernaE) {
+		float pe = d.pe, sentado = 1f - pe;
+		float coxa = AnimPesca.COXA * sentado;
+		pernaD.xRot = -coxa;
+		pernaE.xRot = -coxa;
+		pernaD.yRot = 0.314f * sentado;
+		pernaE.yRot = -0.314f * sentado;
+		root.y += AnimPesca.ASSENTO * 16f * AnimPesca.alturaAssento(pe);
+		float impulso = Mth.sin(Mth.PI * pe); // 0 sentado e em pé, 1 no meio
+		body.xRot += 0.45f * impulso;
+		head.xRot += 0.25f * impulso;
+		esq.xRot -= 0.6f * impulso;
+		if (d.fase == AnimPesca.NADA) dir.xRot -= 0.5f * impulso;
+
+		// balanço junto com o barco, girando em torno do assento (12 px abaixo do pivô do root)
+		float bz = 0.035f * sentado * Mth.sin(age * 0.07f + r), bx = 0.02f * sentado * Mth.sin(age * 0.05f + r * 1.3f);
+		root.zRot += bz;
+		root.xRot += bx;
+		root.x += 12f * Mth.sin(bz);
+		root.y += 12f * (1f - Mth.cos(bz)) + 12f * (1f - Mth.cos(bx));
+		root.z -= 12f * Mth.sin(bx);
+	}
+
+	/** Peixe difícil: de pé (levantar), pernas abertas, corpo para trás puxando a vara com as duas mãos. */
 	private static void emPe(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart body,
 	                         ModelPart esq, ModelPart pernaD, ModelPart pernaE) {
 		float w = d.fase == AnimPesca.LUTA ? AnimPesca.inOutSine(d.tempo / 10f)
 				: d.fase == AnimPesca.PUXANDO && d.lutou ? 1f - AnimPesca.inOutSine(d.tempo / AnimPesca.DUR_PUXANDO) : 0f;
 		if (w <= 0) return;
 		float luta = d.fase == AnimPesca.LUTA ? AnimPesca.luta(d.tempo) : 0f, t = d.tempo;
-		root.y -= 7f * w; // fica de pé (sobe do assento)
-		pernaD.xRot = Mth.lerp(w, pernaD.xRot, 0.05f);
-		pernaD.yRot = Mth.lerp(w, pernaD.yRot, 0.1f);
-		pernaD.zRot = Mth.lerp(w, pernaD.zRot, 0.12f);
-		pernaE.xRot = Mth.lerp(w, pernaE.xRot, -0.15f);
-		pernaE.yRot = Mth.lerp(w, pernaE.yRot, -0.1f);
+		pernaD.zRot = Mth.lerp(w, pernaD.zRot, 0.12f); // pernas abertas para se equilibrar
 		pernaE.zRot = Mth.lerp(w, pernaE.zRot, -0.12f);
 		// as duas mãos na vara, o corpo cede e puxa junto com o peixe
 		float tranco = Mth.sin(t * 0.55f);
-		body.xRot = Mth.lerp(w, body.xRot, -0.12f - 0.08f * tranco * luta);
-		head.xRot = Mth.lerp(w, head.xRot, 0.2f + 0.05f * Mth.sin(t * 1.1f) * luta);
+		body.xRot = Mth.lerp(luta, body.xRot, -0.12f - 0.08f * tranco);
+		head.xRot = Mth.lerp(luta, head.xRot, 0.2f + 0.05f * Mth.sin(t * 1.1f));
 		if (luta > 0) {
 			esq.xRot = Mth.lerp(luta, esq.xRot, -1.5f + 0.35f * tranco);
 			esq.yRot = Mth.lerp(luta, esq.yRot, 0.45f);
@@ -96,7 +113,8 @@ public final class PoseMarcio {
 		root.y += n * 1.2f * Mth.sin(c * 2f); // sobe e desce com as braçadas
 	}
 
-	private static void especial(DadosMarcio d, ModelPart head, ModelPart body, ModelPart dir, ModelPart esq) {
+	private static void especial(DadosMarcio d, ModelPart root, ModelPart head, ModelPart body, ModelPart dir, ModelPart esq,
+	                             ModelPart pernaD, ModelPart pernaE) {
 		float w = AnimMarcio.peso(d.anim, d.animTempo);
 		if (w <= 0) return;
 		float t = d.animTempo, u = t / AnimMarcio.duracao(d.anim);
@@ -127,10 +145,16 @@ public final class PoseMarcio {
 				body.yRot = Mth.lerp(w, body.yRot, 0.15f * Mth.sin(t * 0.45f));
 			}
 			case AnimMarcio.CARINHO -> {
-				// vira para trás (o Pinto fica no baú) e afaga a cabeça dele com a mão esquerda
-				misturar(esq, 1.1f + 0.15f * Mth.sin(t * 0.9f), 0.35f, -0.5f, w);
-				body.yRot = Mth.lerp(w, body.yRot, -0.15f); // pouco: os braços não giram junto com o tronco
-				head.xRot = Mth.lerp(w, head.xRot, 0.25f);
+				// vira o tronco e a cabeça para trás (o Pinto fica no baú), estica o braço esquerdo
+				// para cima e para trás e afaga a cabeça dele; as pernas continuam para a frente
+				float giro = 0.9f * w;
+				root.yRot += giro;
+				pernaD.yRot -= giro;
+				pernaE.yRot -= giro;
+				head.yRot = Mth.lerp(w, head.yRot, 0.8f);
+				head.xRot = Mth.lerp(w, head.xRot, 0.15f);
+				misturar(esq, 2.0f + 0.18f * Mth.sin(t * 0.9f), -0.2f, -0.35f + 0.08f * Mth.sin(t * 0.9f + 1f), w);
+				body.xRot = Mth.lerp(w, body.xRot, -0.08f);
 			}
 			default -> {}
 		}

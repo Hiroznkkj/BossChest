@@ -61,7 +61,8 @@ public final class Pescador {
 		List<BlockPos> caminho = List.of();
 		int idx, timer;
 		Vec3 ultimaPos = Vec3.ZERO;
-		int re, remouEm; // ticks de ré para desencalhar; último tick em que remou
+		int re, remouEm, travas; // ticks de ré para desencalhar; último tick em que remou; encalhes seguidos
+		final Map<BlockPos, Integer> evitar = new HashMap<>(); // onde encalhou -> até quando evitar
 		Modo modo = Modo.NAVEGANDO;
 		// pesca
 		Boia boia;
@@ -78,6 +79,11 @@ public final class Pescador {
 		final Map<UUID, Integer> cumprimentou = new HashMap<>();
 		UUID ladrao;
 		boolean bebado; // de vez em quando acorda bêbado: fala bobagem e rema torto o dia todo
+		// /bauchefe marcio testar: resultado forçado da pesca, mordida rápida, fora do barco até, fila do "tudo"
+		Boolean testeFisga, testeDificil;
+		boolean testeRapido;
+		int remontarEm, demoProx;
+		ArrayDeque<String> demo;
 	}
 
 	private static final Map<UUID, Estado> estados = new HashMap<>();
@@ -103,6 +109,8 @@ public final class Pescador {
 				}
 				if (relogio % 100 == 0) chapeu(level, v);
 				vida(level, v, s);
+				if (s.remontarEm > 0) { if (relogio >= s.remontarEm) remontar(level, v, s); continue; } // teste fora do barco
+				if (s.demo != null) demo(level, v, s);
 				if (s.modo == Modo.PERSEGUINDO) { perseguir(level, v, s); continue; }
 				if (s.modo == Modo.EM_TERRA || s.modo == Modo.VOLTANDO) { if (!emTerra(level, v, s)) it.remove(); continue; }
 				if (!(v.getVehicle() instanceof AbstractBoat barco)) {
@@ -211,6 +219,7 @@ public final class Pescador {
 		BlockPos fim = s.caminho.get(s.caminho.size() - 1);
 		if (Math.pow(fim.getX() + 0.5 - pos.x, 2) + Math.pow(fim.getZ() + 0.5 - pos.z, 2) < 1.2) {
 			s.idx = s.caminho.size();
+			s.travas = 0;
 			return false;
 		}
 		// se já está mais perto de um ponto adiante, pula para ele
@@ -277,8 +286,43 @@ public final class Pescador {
 		if (relogio % 30 == 0) {
 			boolean preso = pos.distanceToSqr(s.ultimaPos) < 0.04;
 			s.ultimaPos = pos;
-			if (preso) s.re = 15;
+			if (preso) encalhou(level, barco, s, frente);
 		}
+		return false;
+	}
+
+	/**
+	 * Encalhou: marca os blocos logo à frente para o próximo caminho desviar deles por 1 min e dá ré.
+	 * Se encalhar 3 vezes seguidas, empurra o barco de leve para o meio do bloco de água mais livre por perto.
+	 */
+	private static void encalhou(ServerLevel level, AbstractBoat barco, Estado s, Vec3 frente) {
+		s.re = 15;
+		s.travas++;
+		Vec3 pos = barco.position();
+		for (double dist : new double[]{1.0, 1.8}) {
+			BlockPos b = BlockPos.containing(pos.x + frente.x * dist, barco.getY() - 0.3, pos.z + frente.z * dist);
+			s.evitar.put(b, relogio + 1200);
+		}
+		for (int k = s.idx; k < Math.min(s.caminho.size(), s.idx + 2); k++) s.evitar.put(s.caminho.get(k), relogio + 1200);
+		if (s.travas >= 3) {
+			BlockPos aqui = BlockPos.containing(pos.x, barco.getY() - 0.3, pos.z), melhor = null;
+			for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+				BlockPos q = aqui.offset(dx, 0, dz);
+				if (agua(level, q) && (melhor == null || largura(level, q) > largura(level, melhor))) melhor = q;
+			}
+			if (melhor != null) {
+				Vec3 c = Vec3.atBottomCenterOf(melhor);
+				barco.setDeltaMovement((c.x - pos.x) * 0.2, barco.getDeltaMovement().y, (c.z - pos.z) * 0.2);
+			}
+			s.travas = 0;
+		}
+	}
+
+	/** Pode passar por esse bloco de água (não está na lista de encalhes recentes)? */
+	private static boolean livreDeEncalhe(Estado s, BlockPos p) {
+		Integer ate = s.evitar.get(p);
+		if (ate == null) return true;
+		if (ate < relogio) { s.evitar.remove(p); return true; }
 		return false;
 	}
 
@@ -358,7 +402,7 @@ public final class Pescador {
 			case AnimPesca.VOO -> {
 				if (s.faseT >= AnimPesca.DUR_VOO) {
 					mudar(s, AnimPesca.BOIANDO);
-					s.timer = 100 + r.nextInt(200); // 5 a 15 s até morder
+					s.timer = s.testeRapido ? 30 : 100 + r.nextInt(200); // 5 a 15 s até morder
 					level.sendParticles(ParticleTypes.SPLASH, b.x, b.y + 0.1, b.z, 6, 0.1, 0, 0.1, 0.05);
 				}
 			}
@@ -370,8 +414,9 @@ public final class Pescador {
 				}
 				if (s.timer <= 0) {
 					mudar(s, AnimPesca.MORDIDA);
-					s.fisgou = r.nextFloat() < 0.7f;
-					s.dificil = s.fisgou && r.nextFloat() < 0.25f; // às vezes o peixe briga
+					s.fisgou = s.testeFisga != null ? s.testeFisga : r.nextFloat() < 0.7f;
+					s.dificil = s.fisgou && (s.testeDificil != null ? s.testeDificil : r.nextFloat() < 0.25f); // às vezes o peixe briga
+					s.testeFisga = null; s.testeDificil = null; s.testeRapido = false;
 					level.playSound(null, b.x, b.y, b.z, SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.35f, 1 + (r.nextFloat() - r.nextFloat()) * 0.4f);
 					level.sendParticles(ParticleTypes.SPLASH, b.x, b.y + 0.1, b.z, 12, 0.2, 0, 0.2, 0.1);
 					level.sendParticles(ParticleTypes.BUBBLE, b.x, b.y - 0.2, b.z, 8, 0.2, 0.1, 0.2, 0.1);
@@ -576,7 +621,7 @@ public final class Pescador {
 				return true;
 			}
 			for (BlockPos q : new BlockPos[]{p.north(), p.south(), p.east(), p.west()}) {
-				if (pai.containsKey(q) || q.distManhattan(s.casa) > LONGE_DE_CASA + 16 || !agua(level, q)) continue;
+				if (pai.containsKey(q) || q.distManhattan(s.casa) > LONGE_DE_CASA + 16 || !agua(level, q) || !livreDeEncalhe(s, q)) continue;
 				pai.put(q, p); fila.add(q);
 			}
 		}
@@ -742,6 +787,108 @@ public final class Pescador {
 			s.proximaQueixa = relogio + 300; // reclama a cada 15 s
 	}
 
+	// ---------- /bauchefe marcio testar ----------
+
+	/** Nomes aceitos pelo /bauchefe marcio testar. */
+	public static final List<String> TESTES = List.of("tudo", "espreguicar", "cocar", "acenar", "comemorar", "carinho",
+			"pesca", "peixedificil", "vazio", "nadar", "levantar", "fala");
+	private static final List<String> TESTES_TUDO = List.of("levantar", "espreguicar", "cocar", "acenar", "carinho",
+			"pesca", "peixedificil", "vazio", "comemorar", "fala", "nadar");
+
+	/** Faz o pescador mais próximo mostrar uma animação (ou todas, em sequência). */
+	public static String testar(ServerLevel level, Vec3 origem, String qual) {
+		Villager v = null;
+		double best = 64 * 64;
+		for (Villager c : level.getEntities(EntityTypes.VILLAGER, Pescador::ehPescador)) {
+			double d = c.distanceToSqr(origem);
+			if (d < best) { best = d; v = c; }
+		}
+		if (v == null) return "§cNenhum pescador num raio de 64 blocos";
+		if (!(v.getVehicle() instanceof AbstractBoat barco)) return "§cO pescador precisa estar no barco";
+		Villager dono = v;
+		Estado s = estados.computeIfAbsent(v.getUUID(), u -> { Estado n = new Estado(); n.casa = dono.blockPosition(); return n; });
+		s.barco = barco.getUUID();
+		s.modo = Modo.NAVEGANDO;
+		if (qual.equals("tudo")) {
+			s.demo = new ArrayDeque<>(TESTES_TUDO);
+			s.demoProx = relogio + 20;
+			return "§6Testando tudo: " + String.join(", ", TESTES_TUDO) + " §7(chegue perto para o aceno)";
+		}
+		if (!TESTES.contains(qual)) return "§cNão conheço \"" + qual + "\". Opções: " + String.join(", ", TESTES);
+		return executar(level, v, barco, s, qual);
+	}
+
+	/** "tudo": quando ele está à toa no barco, roda o próximo teste da fila. */
+	private static void demo(ServerLevel level, Villager v, Estado s) {
+		s.timer = Math.max(s.timer, 100); // não pesca nem faz animação sozinho no meio do teste
+		s.proximaAnim = Math.max(s.proximaAnim, relogio + 600);
+		if (!(v.getVehicle() instanceof AbstractBoat barco) || s.boia != null || relogio < s.animFim || relogio < s.demoProx) return;
+		String qual = s.demo.poll();
+		if (qual == null) { s.demo = null; avisar(level, v, "§6[teste] fim"); return; }
+		avisar(level, v, "§6[teste] §f" + qual + " §7" + executar(level, v, barco, s, qual));
+		s.demoProx = relogio + 50;
+	}
+
+	private static void avisar(ServerLevel level, Villager v, String msg) {
+		for (ServerPlayer p : level.players()) if (p.distanceToSqr(v) < 48 * 48) p.sendSystemMessage(Component.literal(msg));
+	}
+
+	private static String executar(ServerLevel level, Villager v, AbstractBoat barco, Estado s, String qual) {
+		RandomSource r = level.getRandom();
+		largarBoia(s);
+		s.animFim = 0;
+		switch (qual) {
+			case "espreguicar", "cocar", "acenar", "comemorar", "carinho" -> {
+				int a = switch (qual) {
+					case "espreguicar" -> AnimMarcio.ESPREGUICAR;
+					case "cocar" -> AnimMarcio.COCAR;
+					case "acenar" -> AnimMarcio.ACENAR;
+					case "comemorar" -> AnimMarcio.COMEMORAR;
+					default -> AnimMarcio.CARINHO;
+				};
+				if (!comecarAnim(level, v, barco, s, r, a))
+					return a == AnimMarcio.ACENAR ? "§cprecisa de alguém a até 12 blocos" : "§cprecisa do Pinto no barco";
+			}
+			case "pesca", "peixedificil", "vazio" -> {
+				s.testeFisga = !qual.equals("vazio");
+				s.testeDificil = qual.equals("peixedificil");
+				s.testeRapido = true;
+				comecarPesca(level, v, barco, s, r);
+				if (s.boia == null) return "§cnão achei água livre do lado do barco";
+			}
+			case "nadar" -> {
+				// pula na água ao lado do barco e volta depois de 6 s
+				BlockPos agua = null;
+				for (int raio = 2; raio <= 4 && agua == null; raio++)
+					for (Direction d : Direction.Plane.HORIZONTAL) {
+						BlockPos q = BlockPos.containing(barco.getX(), barco.getY() - 0.3, barco.getZ()).relative(d, raio);
+						if (agua(level, q)) { agua = q; break; }
+					}
+				if (agua == null) return "§cnão achei água por perto";
+				v.stopRiding();
+				v.teleportTo(agua.getX() + 0.5, agua.getY() + 0.4, agua.getZ() + 0.5);
+				s.remontarEm = relogio + 120;
+			}
+			case "levantar" -> {
+				// desce do barco e sobe de novo (levantar e sentar)
+				v.stopRiding();
+				s.remontarEm = relogio + 50;
+			}
+			case "fala" -> {
+				Falas.Tipo[] tipos = {Falas.Tipo.PIADA, Falas.Tipo.PINTO, Falas.Tipo.SONHO, Falas.Tipo.CANCAO};
+				falar(level, v, s, tipos[r.nextInt(tipos.length)], null, true);
+			}
+			default -> { return "§c?"; }
+		}
+		return "";
+	}
+
+	/** Volta para o barco depois de um teste fora dele. */
+	private static void remontar(ServerLevel level, Villager v, Estado s) {
+		s.remontarEm = 0;
+		if (s.barco != null && level.getEntity(s.barco) instanceof AbstractBoat barco) embarcar(level, v, barco, s);
+	}
+
 	// ---------- /bauchefe marcio ----------
 
 	/** Troca o barco do pescador mais próximo por um barco com baú e monta ele e a galinha. */
@@ -815,7 +962,7 @@ public final class Pescador {
 			int d = passos.get(p);
 			if (d >= 8 && d <= 28) candidatos.add(p);
 			for (BlockPos q : new BlockPos[]{p.north(), p.south(), p.east(), p.west()}) {
-				if (feito.contains(q) || q.distManhattan(s.casa) > LONGE_DE_CASA || !agua(level, q)) continue;
+				if (feito.contains(q) || q.distManhattan(s.casa) > LONGE_DE_CASA || !agua(level, q) || !livreDeEncalhe(s, q)) continue;
 				double c = custo.get(p) + 1 + (9 - largura(level, q)) * 0.7; // margem perto = mais caro
 				if (c < custo.getOrDefault(q, Double.MAX_VALUE)) {
 					custo.put(q, c); passos.put(q, d + 1); pai.put(q, p); fila.add(q);

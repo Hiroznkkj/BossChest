@@ -46,7 +46,7 @@ public class BoiaRenderer extends EntityRenderer<Boia, BoiaRenderer.Estado> {
 		st.visivel = dono != null && vis != null;
 		if (!st.visivel) return;
 		st.desloc = vis.subtract(e.getPosition(partial));
-		Vec3 ponta = AnimPesca.ponta(dono, partial, e.faseCliente(), e.tempoFase(partial));
+		Vec3 ponta = AnimPesca.ponta(dono, partial, e.faseCliente(), e.tempoFase(partial), e.lutou());
 		st.linha = ponta.subtract(vis.add(0, 0.25, 0));
 	}
 

@@ -23,6 +23,10 @@ public final class AnimPesca {
 
 	// ponta da vara no espaço do braço direito (blocos, y para baixo, -z para a frente); ajustar no visual
 	private static final double PONTA_X = -0.05, PONTA_Y = 0.44, PONTA_Z = -0.70;
+	/** Quanto o Márcio desce no assento do barco (blocos): o modelo de jogador fica alto no lugar do villager. */
+	public static final float ASSENTO = 0.5f;
+	/** Ângulo das pernas sentado (rad), o mesmo do jogador num barco. */
+	public static final float COXA = 1.4137f;
 	// pivô do braço direito (ombro), igual ao do pillager
 	private static final double OMBRO_X = -5 / 16.0, OMBRO_Y = 2 / 16.0;
 
@@ -59,6 +63,14 @@ public final class AnimPesca {
 		};
 	}
 
+	/**
+	 * Quanto o quadril está abaixado (1 sentado, 0 em pé) para 'pe' de 0 a 1: sai do ângulo da perna,
+	 * para os pés ficarem no chão enquanto ele levanta ou senta.
+	 */
+	public static float alturaAssento(float pe) {
+		return (1f - Mth.cos(COXA * (1f - clamp(pe)))) / (1f - Mth.cos(COXA));
+	}
+
 	/** Intensidade da briga: entra em 8 ticks e sai nos últimos 10 (a puxada começa da pose normal). */
 	public static float luta(float t) {
 		return inOutSine(Math.min(1f, Math.min(t / 8f, (DUR_LUTA - t) / 10f)));
@@ -70,13 +82,18 @@ public final class AnimPesca {
 	 * Ponta da vara no mundo, refazendo as transformações do LivingEntityRenderer e do VillagerModel
 	 * (rotação 180 - corpo, escala -1,-1,1, translate -1.501, ombro e rotação do braço direito).
 	 */
-	public static Vec3 ponta(LivingEntity v, float partial, int fase, float t) {
+	public static Vec3 ponta(LivingEntity v, float partial, int fase, float t, boolean lutou) {
 		float a = braco(fase, t);
 		double c = Mth.cos(a), s = Mth.sin(a);
 		// rotação X do braço (y para baixo, -z para a frente)
 		double mx = OMBRO_X + PONTA_X, my = OMBRO_Y + PONTA_Y * c - PONTA_Z * s, mz = PONTA_Y * s + PONTA_Z * c;
 		// escala -1,-1,1 e translate -1.501
 		double x = -mx, y = 1.501 - my, z = mz;
+		// sentado no barco ele desce ASSENTO; na briga com o peixe fica de pé de novo (mesma conta da PoseMarcio)
+		if (v.isPassenger()) {
+			float pe = fase == LUTA ? inOutSine(t / 10f) : fase == PUXANDO && lutou ? 1f - inOutSine(t / DUR_PUXANDO) : 0f;
+			y -= ASSENTO * alturaAssento(pe);
+		}
 		float yaw = (180f - Mth.rotLerp(partial, v.yBodyRotO, v.yBodyRot)) * Mth.DEG_TO_RAD;
 		double cy = Mth.cos(yaw), sy = Mth.sin(yaw);
 		Vec3 base = v.getPosition(partial);

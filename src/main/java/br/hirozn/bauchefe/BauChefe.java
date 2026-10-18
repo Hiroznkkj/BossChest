@@ -12,6 +12,8 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.item.ItemArgument;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -88,7 +90,15 @@ public class BauChefe implements ModInitializer {
 					String msg = Pescador.trocarBarco(c.getSource().getLevel(), c.getSource().getPosition());
 					c.getSource().sendSystemMessage(Component.literal(msg));
 					return msg.startsWith("§6") ? 1 : 0;
-				}))
+				})
+						// /bauchefe marcio testar <animação|tudo>: mostra as animações no pescador mais próximo
+						.then(Commands.literal("testar").then(Commands.argument("qual", StringArgumentType.word())
+								.suggests((c, b) -> SharedSuggestionProvider.suggest(Pescador.TESTES, b))
+								.executes(c -> {
+									String msg = Pescador.testar(c.getSource().getLevel(), c.getSource().getPosition(), StringArgumentType.getString(c, "qual"));
+									c.getSource().sendSystemMessage(Component.literal(msg.isEmpty() ? "§6Testando " + StringArgumentType.getString(c, "qual") : msg));
+									return msg.startsWith("§c") ? 0 : 1;
+								}))))
 				.then(Commands.literal("abrir").executes(c -> { responder(c.getSource().getPlayerOrException(), ""); return 1; }))
 				.then(Commands.literal("guardar").executes(c -> {
 					ServerPlayer pl = c.getSource().getPlayerOrException();

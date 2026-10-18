@@ -15,8 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Barco com baú do Márcio: ele na frente e a galinha sentada em cima do baú (também quando ela fica sozinha à noite). */
 @Mixin(AbstractBoat.class)
 public abstract class AbstractBoatMixin {
-	// topo do baú: 0.375 do renderer + 9 px do modelo; o baú fica meio bloco atrás do centro
-	private static final double BAUCHEFE$TOPO_BAU = 0.9375, BAUCHEFE$ATRAS = -0.5;
+	// em cima do baú (topo do baú menos uns 4 px, senão a galinha fica flutuando); o baú fica meio bloco atrás do centro
+	private static final double BAUCHEFE$TOPO_BAU = 0.6875, BAUCHEFE$ATRAS = -0.5;
 
 	@Inject(method = "getPassengerAttachmentPoint", at = @At("RETURN"), cancellable = true)
 	private void bauchefe$galinhaNoBau(Entity passenger, EntityDimensions dim, float scale, CallbackInfoReturnable<Vec3> cir) {
