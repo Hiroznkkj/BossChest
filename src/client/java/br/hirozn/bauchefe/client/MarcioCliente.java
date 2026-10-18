@@ -13,9 +13,8 @@ import br.hirozn.bauchefe.BauChefe;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.entity.state.VillagerRenderState;
+import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.util.Mth;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.Villager;
 
@@ -34,8 +33,8 @@ public final class MarcioCliente {
 
 	private static final Int2ObjectMap<Fala> falas = new Int2ObjectOpenHashMap<>();
 	private static final Int2ObjectMap<Anim> anims = new Int2ObjectOpenHashMap<>();
-	private static final Int2ObjectMap<float[]> piscadas = new Int2ObjectOpenHashMap<>(); // {próxima piscada}
-	private static final RandomSource r = RandomSource.create();
+	private static final Int2ObjectMap<float[]> nado = new Int2ObjectOpenHashMap<>(); // {peso, último tempo}
+	private static final Int2ObjectMap<MarcioSom[]> sons = new Int2ObjectOpenHashMap<>();
 
 	private MarcioCliente() {}
 
@@ -50,7 +49,10 @@ public final class MarcioCliente {
 		else falas.put(p.villager(), new Fala(p.texto().split(" "), null, agora(), DUR_FALA));
 		Minecraft mc = Minecraft.getInstance();
 		Entity v = mc.level == null ? null : mc.level.getEntity(p.villager());
-		if (v != null && !p.som().isEmpty()) MarcioSom.tocar(v, p.som());
+		// fala nova corta a anterior (senão os áudios se sobrepõem, por ex. ao devolver o barco)
+		MarcioSom[] antes = sons.remove(p.villager());
+		if (antes != null) for (MarcioSom m : antes) mc.getSoundManager().stop(m);
+		if (v != null && !p.som().isEmpty()) sons.put(p.villager(), MarcioSom.tocar(v, p.som()));
 	}
 
 	private static Map<String, Tempos> tempos() {
@@ -85,12 +87,13 @@ public final class MarcioCliente {
 			Minecraft mc = Minecraft.getInstance();
 			Entity v = mc.level == null ? null : mc.level.getEntity(p.villager());
 			if (v != null && v.getVehicle() != null)
-				for (Entity e : v.getVehicle().getPassengers()) if (Pescador.ehPinto(e)) Asas.bater(e.getId(), t + 40);
+				for (Entity e : v.getVehicle().getPassengers())
+					if (Pescador.ehPinto(e)) { Asas.bater(e.getId(), t + 40); Asas.carinho(e.getId(), t); }
 		}
 	}
 
 	/** Preenche os dados do render state do pescador. */
-	public static void extrair(Villager v, VillagerRenderState st, float partial, DadosMarcio d) {
+	public static void extrair(Villager v, LivingEntityRenderState st, float partial, DadosMarcio d) {
 		int id = v.getId();
 		float t = agora() + partial;
 		d.pescador = true;
@@ -100,6 +103,7 @@ public final class MarcioCliente {
 		Boia b = Boia.doDono(id);
 		d.fase = b == null ? AnimPesca.NADA : b.faseCliente();
 		d.tempo = b == null ? 0 : b.tempoFase(partial);
+		d.lutou = b != null && b.lutou();
 
 		Anim a = anims.get(id);
 		if (a != null && t - a.inicio() > AnimMarcio.duracao(a.id())) { anims.remove(id); a = null; }
@@ -116,18 +120,11 @@ public final class MarcioCliente {
 			d.falaAlpha = Mth.clamp(Math.min(e / 4f, (f.duracao() - e) / 10f), 0f, 1f); // aparece rápido, some devagar
 		}
 
-		// pupilas seguem o olhar da cabeça, com pequenas mexidas (microssacadas)
-		float rf = d.rFase, age = st.ageInTicks;
-		float sac = Mth.clamp(Mth.sin(rf + age / 27f) + Mth.sin(rf + age / 16f), -0.12f, 0.12f);
-		d.pupilaX = Mth.clamp(-st.yRot / 45f, -1f, 1f) * 0.5f + sac;
-		d.pupilaY = Mth.clamp(st.xRot / 45f, -1f, 1f) * 0.3f + Mth.clamp(Mth.sin(rf + age / 38f) + Mth.sin(rf + age / 13f), -0.08f, 0.08f);
-
-		// pisca a cada 3 a 6 s: fecha em 1 tick e abre em 2 (às vezes pisca duas vezes)
-		float[] p = piscadas.computeIfAbsent(id, k -> new float[]{t + 20 + r.nextInt(60)});
-		float u = t - p[0];
-		if (u >= 3) { p[0] = t + (r.nextFloat() < 0.2f ? 6 : 60 + r.nextInt(60)); u = -1; }
-		d.palpebra = u < 0 ? 0 : u < 1 ? u : 1 - (u - 1) / 2f;
-
-		d.distancia = (float) Math.sqrt(st.distanceToCameraSq);
+		// nado: entra e sai aos poucos (~0,4 s), calculado pelo tempo que passou desde o último quadro
+		float[] n = nado.computeIfAbsent(id, k -> new float[]{0f, t});
+		float alvo = v.isInWater() && !v.isPassenger() ? 1f : 0f, dt = Mth.clamp(t - n[1], 0f, 5f);
+		n[0] = alvo > n[0] ? Math.min(alvo, n[0] + dt / 8f) : Math.max(alvo, n[0] - dt / 8f);
+		n[1] = t;
+		d.nado = AnimPesca.inOutSine(n[0]);
 	}
 }
