@@ -20,8 +20,19 @@ import java.util.List;
 final class Trajeto {
 	/** Fases: andando, passando a perna pela borda, acomodando no lugar, levantando, virando de costas para sentar. */
 	static final int ANDA = 0, PASSA = 1, ACOMODA = 2, LEVANTA = 3, VIRA = 4;
-	/** Lado de fora da parede do barco, metade do comprimento, altura da borda e lugar dele (blocos). */
-	static final double LADO = 0.625, PROA = 0.875, BORDA = 0.5625;
+	/**
+	 * Lado de fora da parede do barco, metade do comprimento e altura da borda (blocos): medidos do tamanho do
+	 * barco de verdade (medir), então servem para barco de mod e jangada; os valores aqui são os do barco vanilla.
+	 */
+	static double LADO = 0.625, PROA = 0.875, BORDA = 0.5625;
+
+	/** Mede o casco pelo tamanho da entidade (largura 1,375 e altura 0,5625 no vanilla). */
+	static void medir(AbstractBoat b) {
+		double w = b.getBbWidth();
+		LADO = w / 2 - 0.0625;
+		PROA = w * 0.64;
+		BORDA = b.getBbHeight();
+	}
 	private static final double ANDAR = 0.11, NADAR = 0.07; // blocos por tick
 
 	final int tipo;
@@ -47,6 +58,7 @@ final class Trajeto {
 
 	/** Subir no barco 'b' saindo de 'de' (da terra ou da água). */
 	static Trajeto subir(boolean agua, float t, Vec3 de, AbstractBoat b, Vec3 lugar, float partial) {
+		medir(b);
 		List<Vec3> poly = aproximacao(local(b, partial, de));
 		double len = comprimento(poly);
 		float anda = (float) Mth.clamp(len / (agua ? NADAR : ANDAR), 4, 50);
@@ -56,6 +68,7 @@ final class Trajeto {
 
 	/** Descer do barco 'b' (estava sentado em 'lugarLocal') até onde ele está agora. */
 	static Trajeto descer(float t, Vec3 destino, AbstractBoat b, Vec3 lugarLocal, float partial) {
+		medir(b);
 		List<Vec3> poly = aproximacao(local(b, partial, destino));
 		double len = comprimento(poly);
 		return new Trajeto(MarcioCliente.DESCER, t, destino, b.getId(), null, 0, 0, lugarLocal,
@@ -67,7 +80,7 @@ final class Trajeto {
 		Vec3 frente = frente(a, yaw, tipo, de.y);
 		double len = Math.sqrt(Math.pow(frente.x - de.x, 2) + Math.pow(frente.z - de.z, 2));
 		return new Trajeto(MarcioCliente.SENTAR, t, de, -1, a, yaw, tipo, null, new float[]{ANDA, VIRA, ACOMODA},
-				new float[]{(float) Mth.clamp(len / ANDAR, 1, 40), 8, duracaoSentar(tipo)}, (float) Math.max(1, Math.round(len * 2.2)));
+				new float[]{(float) Mth.clamp(len / ANDAR, 1, 40), 8, duracaoSentar(tipo) + (a.y - de.y > 0.6 ? 12 : 0)}, (float) Math.max(1, Math.round(len * 2.2)));
 	}
 
 	/** Levantar do assento e andar até onde ele está agora. */
@@ -75,7 +88,7 @@ final class Trajeto {
 		Vec3 frente = frente(a, yaw, tipo, destino.y);
 		double len = Math.sqrt(Math.pow(frente.x - destino.x, 2) + Math.pow(frente.z - destino.z, 2));
 		return new Trajeto(MarcioCliente.LEVANTAR, t, destino, -1, a, yaw, tipo, null, new float[]{LEVANTA, ANDA},
-				new float[]{duracaoSentar(tipo), (float) Mth.clamp(len / ANDAR, 1, 40)}, (float) Math.max(1, Math.round(len * 2.2)));
+				new float[]{duracaoSentar(tipo) + (a.y - destino.y > 0.6 ? 10 : 0), (float) Mth.clamp(len / ANDAR, 1, 40)}, (float) Math.max(1, Math.round(len * 2.2)));
 	}
 
 	/** Sentar no chão e deitar levam mais tempo que sentar numa cadeira. */
@@ -125,6 +138,7 @@ final class Trajeto {
 		float v = f[1];
 		if (tipo == MarcioCliente.SENTAR || tipo == MarcioCliente.LEVANTAR) return pontoAssento(fase, v, agora);
 		if (b == null) return null;
+		medir(b);
 		Vec3 lugar = tipo == MarcioCliente.DESCER ? assentoLocal : local(b, partial, agora);
 		Vec3 longe = local(b, partial, tipo == MarcioCliente.DESCER ? agora : de); // subir: de onde saiu; descer: o destino
 		return mundo(b, partial, noBarco(tipo, fase, v, longe, lugar));
@@ -168,7 +182,7 @@ final class Trajeto {
 			case VIRA -> frente;
 			default -> { // acomoda (sentar) ou levanta: da frente até o assento; se for alto, num pulinho
 				float e = AnimPesca.inOutSine(sentar ? v : 1f - v);
-				double sobe = assento.y - frente.y, pulo = sobe > 0.6 ? 0.22 * Mth.sin(Mth.PI * e) : 0;
+				double sobe = assento.y - frente.y, pulo = sobe > 0.6 ? 0.1 * Mth.sin(Mth.PI * e) : 0; // alto: se empurra com as mãos
 				// abaixar até o assento é a pose (pe); o corpo só desce junto quando o assento está abaixo dos pés
 				double y = Mth.lerp(e, frente.y, sobe > 0 ? assento.y : frente.y) + pulo;
 				yield new Vec3(Mth.lerp(e, frente.x, assento.x), y, Mth.lerp(e, frente.z, assento.z));
@@ -262,6 +276,7 @@ final class Trajeto {
 
 	/** Lado de fora da borda (para a mão): ponto da parede onde ele passa, na altura da borda. */
 	Vec3 bordaDaPassagem(Vec3 agora, AbstractBoat b, float partial) {
+		medir(b);
 		Vec3 longe = local(b, partial, tipo == MarcioCliente.DESCER ? agora : de);
 		int lado = longe.x >= 0 ? 1 : -1;
 		return mundo(b, partial, new Vec3(lado * (LADO - 0.05), BORDA, Mth.clamp(longe.z, -0.1, 0.55) + 0.15));

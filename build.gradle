@@ -79,3 +79,19 @@ publishing {
 		// retrieving dependencies.
 	}
 }
+
+// Testes da pose procedural (IK, embarque, assentos, membros dentro de blocos, teleporte), sem abrir o jogo:
+// ./gradlew testePose  (falha se algo passar do limite; ver src/testePose)
+sourceSets {
+	testePose {
+		compileClasspath += sourceSets.client.output + sourceSets.main.output + sourceSets.client.compileClasspath
+		runtimeClasspath += output + compileClasspath + sourceSets.client.runtimeClasspath
+	}
+}
+
+tasks.register('testePose', JavaExec) {
+	group = 'verification'
+	description = 'Testes da pose procedural do Márcio'
+	classpath = sourceSets.testePose.runtimeClasspath
+	mainClass = 'br.hirozn.bauchefe.client.TestePose'
+}

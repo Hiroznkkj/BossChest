@@ -3,6 +3,7 @@ Mod Fabric "Baú Chefe" (bauchefe) para Minecraft 26.3.
 
 - [FALAS.md](FALAS.md): as falas do Márcio pescador.
 - [ANIMACOES.md](ANIMACOES.md): como fazer e trocar as animações do Márcio no Blockbench (`/marcioanim`).
+- [PROCEDURAL.md](PROCEDURAL.md): como a pose é calculada pelo mundo (IK, camadas) e como criar uma reação nova; testes com `./gradlew testePose`.
 
 ## Créditos
 

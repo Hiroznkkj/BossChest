@@ -74,7 +74,10 @@ public final class Pacotes {
 	 * x, y, z é de onde veio a coisa (o raio do susto). Tipos em Reacao.SUSTO...
 	 */
 	public record Reacao(int villager, int tipo, int alvo, double x, double y, double z) implements CustomPacketPayload {
-		public static final int SUSTO = 1, OFERECE = 2, BATE = 3, LIVRO = 4, GUARDA = 5;
+		public static final int SUSTO = 1, OFERECE = 2, BATE = 3, LIVRO = 4, GUARDA = 5, CALOR = 6, AQUECER = 7, ARMADURA = 8,
+				MEDIR = 9, CONVERSA = 10;
+		/** Termina um estado contínuo (medir, aquecer, conversa): 'alvo' é o tipo que terminou. */
+		public static final int PARA = 11;
 		public static final Type<Reacao> TYPE = Pacotes.tipo("reacao");
 		public static final StreamCodec<ByteBuf, Reacao> CODEC = StreamCodec.composite(
 				ByteBufCodecs.VAR_INT, Reacao::villager, ByteBufCodecs.VAR_INT, Reacao::tipo, ByteBufCodecs.VAR_INT, Reacao::alvo,

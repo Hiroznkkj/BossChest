@@ -47,7 +47,7 @@ public class BauChefeClient implements ClientModInitializer {
 					try {
 						var pasta = AnimExportar.exportar();
 						c.getSource().sendFeedback(Component.literal("§6Animações do código exportadas em §f" + pasta
-								+ "\n§7Abra o marcio.geo.json no Blockbench, importe o marcio.animation.json, mexa e exporte para §f" + AnimCustom.PASTA));
+								+ "\n§7Abra o marcio.geo.json no Blockbench, importe o marcio.animation.json, mexa e exporte para §f" + AnimCustom.pasta()));
 						return 1;
 					} catch (Exception e) {
 						BauChefe.LOG.warn("[Baú Chefe] Não deu para exportar as animações", e);
@@ -62,7 +62,7 @@ public class BauChefeClient implements ClientModInitializer {
 						.executes(c -> {
 							String nome = StringArgumentType.getString(c, "nome");
 							AnimCustom.Anim a = AnimCustom.get(nome);
-							if (a == null) { c.getSource().sendError(Component.literal("Não achei a animação \"" + nome + "\" em " + AnimCustom.PASTA)); return 0; }
+							if (a == null) { c.getSource().sendError(Component.literal("Não achei a animação \"" + nome + "\" em " + AnimCustom.pasta())); return 0; }
 							var lista = c.getSource().getLevel().getEntitiesOfClass(Villager.class, c.getSource().getPlayer().getBoundingBox().inflate(32), Pescador::ehPescador);
 							Villager v = lista.stream().min(java.util.Comparator.comparingDouble(x -> x.distanceToSqr(c.getSource().getPlayer()))).orElse(null);
 							if (v == null) { c.getSource().sendError(Component.literal("Nenhum pescador a até 32 blocos")); return 0; }
@@ -79,7 +79,7 @@ public class BauChefeClient implements ClientModInitializer {
 
 	private static void avisarAnims(FabricClientCommandSource src, int n) {
 		src.sendFeedback(Component.literal("§6" + n + " animações customizadas" + (n > 0 ? ": §f" + String.join(", ", AnimCustom.nomes()) : "")
-				+ " §7(" + AnimCustom.PASTA + ")"));
+				+ " §7(" + AnimCustom.pasta() + ")"));
 		if (AnimCustom.ultimoErro != null) src.sendError(Component.literal(AnimCustom.ultimoErro));
 	}
 

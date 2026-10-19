@@ -112,5 +112,25 @@ Por enquanto essas aparecem só no balão, sem voz. Roteiro para colar no Eleven
 | Baixa: papo sentado no chão | `papo_2` | [sighing] A vida de pescador é boa, viu. | A vida de pescador é boa, viu. |
 | Baixa: papo sentado no chão | `papo_3` | Sabe o que eu queria? Um barco com dois baús. | Sabe o que eu queria? Um barco com dois baús. |
 | Baixa: papo sentado no chão | `papo_4` | [chuckling] Uma vez eu pesquei uma bota. Uso até hoje. | Uma vez eu pesquei uma bota. Uso até hoje. |
+| Média: fogo perto | `quente_1` | [gasping] Opa, tá quente aqui! | Opa, tá quente aqui! |
+| Média: fogo perto | `quente_2` | Eita, quase chamusquei o bigode! | Eita, quase chamusquei o bigode! |
+| Média: fogo perto | `quente_3` | [coughing] Fogo não é brinquedo, não! | Fogo não é brinquedo, não! |
+| Média: pegando fogo | `fogo_1` | [shouting] Tô pegando fogo! Água, água! | Tô pegando fogo! Água, água! |
+| Média: pegando fogo | `fogo_2` | [screaming] Ai ai ai, apaga, apaga! | Ai ai ai, apaga, apaga! |
+| Média: armadura nova (%s = nome) | `armadura_1` | [impressed] Olha só, %s! Que armadura bonita! | Olha só, %s! Que armadura bonita! |
+| Média: armadura nova (%s = nome) | `armadura_2` | Tá brilhando, hein, %s! | Tá brilhando, hein, %s! |
+| Média: armadura nova | `armadura_3` | [chuckling] Com essa armadura nem o Pinto te bica! | Com essa armadura nem o Pinto te bica! |
+| Média: quarto pequeno (%s = passos) | `quarto_1` | %s passos... Isso é um quarto ou um armário? | %s passos... Isso é um quarto ou um armário? |
+| Média: quarto pequeno (%s = passos) | `quarto_2` | Só %s passos de parede a parede. Meu barco é maior! | Só %s passos de parede a parede. Meu barco é maior! |
+| Média: quarto pequeno (%s = passos) | `quarto_3` | [sighing] %s passos. Até o Pinto ia reclamar desse quarto. | %s passos. Até o Pinto ia reclamar desse quarto. |
+| Baixa: conversa com aldeão | `conversa_1` | E aí, compadre, como tá a colheita? | E aí, compadre, como tá a colheita? |
+| Baixa: conversa com aldeão | `conversa_2` | Sabia que o peixe morde mais de manhã? | Sabia que o peixe morde mais de manhã? |
+| Baixa: conversa com aldeão | `conversa_3` | [chuckling] Você viu o Pinto hoje? Tá cada dia mais bonito. | Você viu o Pinto hoje? Tá cada dia mais bonito. |
+| Baixa: conversa com aldeão | `conversa_4` | [whispering] Dizem que tem um peixe gigante no rio. | Dizem que tem um peixe gigante no rio. |
+| Baixa: chuva | `chuva_1` | [sighing] Chuva... os peixes adoram, eu não. | Chuva... os peixes adoram, eu não. |
+| Baixa: chuva | `chuva_2` | Ai, molhou meu chapéu! | Ai, molhou meu chapéu! |
+| Baixa: chuva | `chuva_3` | Bom pra horta, ruim pro pescador. | Bom pra horta, ruim pro pescador. |
+
+Nas falas com `%s`, o jogo troca pelo nome do jogador (ou pelo número de passos). Grave uma versão sem o nome, ou deixe essas só no balão.
 
 Opcionais (o tipo já tem voz, seriam só mais variedade): mais frases de acordar, anoitecer, bocejo e carinho.
