@@ -31,6 +31,8 @@ public class BauChefeClient implements ClientModInitializer {
 		EntityRenderers.register(BauChefe.BOIA, BoiaRenderer::new);
 		ClientPlayNetworking.registerGlobalReceiver(Pacotes.Fala.TYPE, (p, ctx) -> MarcioCliente.fala(p));
 		ClientPlayNetworking.registerGlobalReceiver(Pacotes.Anim.TYPE, (p, ctx) -> MarcioCliente.anim(p));
+		ClientPlayNetworking.registerGlobalReceiver(Pacotes.Reacao.TYPE, (p, ctx) -> MarcioCliente.reacao(p));
+		EntityRenderers.register(BauChefe.ASSENTO, net.minecraft.client.renderer.entity.NoopRenderer::new); // assento invisível
 		Atualizador.iniciar();
 		ClientPlayConnectionEvents.JOIN.register((h, sender, mc) -> {
 			String a = Atualizador.aviso;

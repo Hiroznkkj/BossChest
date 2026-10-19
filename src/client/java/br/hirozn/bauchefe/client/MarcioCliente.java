@@ -19,6 +19,9 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
+import br.hirozn.bauchefe.Assento;
+import br.hirozn.bauchefe.Lugares;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -28,7 +31,7 @@ import java.util.Map;
 public final class MarcioCliente {
 	public static final int DUR_FALA = 80;
 	/** Transições: nenhuma, pulo qualquer (teste, cama), subir no barco da terra, subir da água, descer do barco. */
-	public static final int SEM = 0, PULO = 1, SUBIR_TERRA = 2, SUBIR_AGUA = 3, DESCER = 4;
+	public static final int SEM = 0, PULO = 1, SUBIR_TERRA = 2, SUBIR_AGUA = 3, DESCER = 4, SENTAR = 5, LEVANTAR = 6;
 
 	private record Fala(String[] palavras, float[] tempos, long inicio, int duracao, int humor) {}
 	/** Tempo de cada palavra nos áudios (assets/bauchefe/marcio_falas.json, gerado a partir da transcrição). */
@@ -47,6 +50,13 @@ public final class MarcioCliente {
 	private static final Int2ObjectMap<double[]> saltos = new Int2ObjectOpenHashMap<>();
 	private static final Int2ObjectMap<float[]> assento = new Int2ObjectOpenHashMap<>(); // {1 no barco, tempo da troca, última vez na água}
 	private static final Int2ObjectMap<MarcioSom[]> sons = new Int2ObjectOpenHashMap<>();
+	private record Reac(float t0, Vec3 onde, int alvo) {}
+	private static final Int2ObjectMap<Reac[]> reacoes = new Int2ObjectOpenHashMap<>();
+	private static final Int2ObjectMap<Trajeto> trajetos = new Int2ObjectOpenHashMap<>();
+	// onde ele estava montado no último quadro: {id do veículo, x,y,z (no barco: espaço do barco), yaw, tipo, -, 1 barco / 2 assento}
+	private static final Int2ObjectMap<double[]> montadoEm = new Int2ObjectOpenHashMap<>();
+	private static final Int2ObjectMap<float[]> giro = new Int2ObjectOpenHashMap<>(); // {giro do corpo suave, último tempo}
+	private static final Int2ObjectMap<float[]> beiradas = new Int2ObjectOpenHashMap<>(); // {início, pode de novo em, tinha buraco}
 
 	private MarcioCliente() {}
 
@@ -114,6 +124,12 @@ public final class MarcioCliente {
 				for (Entity e : v.getVehicle().getPassengers())
 					if (Pescador.ehPinto(e)) { Asas.bater(e.getId(), mundoT + 40); Asas.carinho(e.getId(), mundoT); }
 		}
+	}
+
+	/** Reação procedural mandada pelo servidor (susto, hi five, livro). */
+	public static void reacao(Pacotes.Reacao r) {
+		if (r.tipo() <= 0 || r.tipo() > 5) return;
+		reacoes.computeIfAbsent(r.villager(), k -> new Reac[6])[r.tipo()] = new Reac(agora(), new Vec3(r.x(), r.y(), r.z()), r.alvo());
 	}
 
 	/** /marcioanim tocar: toca a animação customizada no Márcio (só neste PC). */
@@ -195,108 +211,209 @@ public final class MarcioCliente {
 		if (alvo > 0) n[2] = Mth.lerp(Math.min(1f, dt * 0.3f), n[2], (float) v.getFluidHeight(FluidTags.WATER)); // linha d'água nos pés
 		d.nado = AnimPesca.inOutSine(n[0]);
 		d.agua = n[2];
+		alvos(v, st, t, partial, d);
 	}
 
 	/**
-	 * Sentar, levantar e trocar de lugar sem teleporte. Quando o servidor muda o Márcio de lugar de uma vez
-	 * (embarcar, descer na doca, deitar na cama, testes), o corpo sai do lugar antigo e faz o caminho até o novo
-	 * com a animação do tipo certo: da terra ele anda até a borda, passa a perna por cima e senta; da água ele
-	 * se agarra na borda e sobe; para descer ele levanta apoiando a mão, passa a perna e anda até a doca.
+	 * Sentar, levantar e trocar de lugar sem teleporte. Subir e descer do barco e sentar e levantar de um assento
+	 * seguem o Trajeto (calculado com a posição e o giro de verdade do barco e do assento, a cada quadro). Qualquer
+	 * outra mudança de lugar de uma vez (cama, testes) vira um pulinho do lugar antigo até o novo. O corpo nunca
+	 * vira de uma vez: no máximo 15° por tick, seguindo o rumo do caminho.
 	 */
 	private static void transicao(Villager v, LivingEntityRenderState st, float t, float partial, DadosMarcio d) {
 		int id = v.getId();
-		boolean noBarco = v.isPassenger();
+		Entity veiculo = v.getVehicle();
+		boolean montado = veiculo != null;
 		Vec3 pos = v.getPosition(partial);
-		double[] sl = saltos.get(id);
-		if (sl == null) saltos.put(id, sl = new double[]{pos.x, pos.y, pos.z, t, 0, 0, 0, -1000, 1, SEM});
+		double[] sl = saltos.get(id); // {x,y,z,t do quadro anterior, desvio x,y,z, início, duração, -, corpo x,y,z}
+		if (sl == null) saltos.put(id, sl = new double[]{pos.x, pos.y, pos.z, t, 0, 0, 0, -1000, 1, 0, pos.x, pos.y, pos.z});
 		boolean visto = t - sl[3] < 3; // estava sendo desenhado até agora (senão a troca aconteceu fora da tela)
-		float[] a0 = assento.computeIfAbsent(id, k -> new float[]{noBarco ? 1f : 0f, -1000f, -1000f});
-		boolean mudou = (a0[0] > 0.5f) != noBarco;
-		if (mudou) { a0[0] = noBarco ? 1f : 0f; a0[1] = visto ? t : -1000f; mudou = visto; }
-		if (v.isInWater() && !noBarco) a0[2] = t;
-		int tipoTroca = noBarco ? (t - a0[2] < 10 ? SUBIR_AGUA : SUBIR_TERRA) : DESCER;
+		float[] a0 = assento.computeIfAbsent(id, k -> new float[]{montado ? 1f : 0f, -1000f, -1000f});
+		boolean mudou = (a0[0] > 0.5f) != montado;
+		if (mudou) { a0[0] = montado ? 1f : 0f; a0[1] = visto ? t : -1000f; }
+		if (v.isInWater() && !montado) a0[2] = t;
+		Vec3 corpoAntes = visto ? new Vec3(sl[10], sl[11], sl[12]) : pos;
 
-		float u = (float) ((t - sl[7]) / sl[8]);
-		double[] o = u < 1 ? caminho((int) sl[9], u, sl[4], sl[5], sl[6]) : new double[3];
-		if (t - sl[3] < 3 && pos.distanceToSqr(sl[0], sl[1], sl[2]) > 0.9 * 0.9) {
-			// mudou de lugar de uma vez: começa do ponto onde o corpo está agora (continua um caminho em andamento)
-			sl[4] = sl[0] - pos.x + o[0]; sl[5] = sl[1] - pos.y + o[1]; sl[6] = sl[2] - pos.z + o[2];
+		Trajeto tr = trajetos.get(id);
+		if (tr != null && t - tr.inicio > tr.duracao()) { trajetos.remove(id); tr = null; }
+		double[] m = montadoEm.get(id);
+		if (mudou && visto) {
+			tr = null;
+			if (veiculo instanceof AbstractBoat b) tr = Trajeto.subir(t - a0[2] < 10, t, corpoAntes, b, Trajeto.local(b, partial, pos), partial);
+			else if (veiculo instanceof Assento as) tr = Trajeto.sentar(t, corpoAntes, as.position(), as.getYRot(), as.tipo());
+			else if (veiculo == null && m != null) {
+				if (m[7] == 1 && v.level().getEntity((int) m[0]) instanceof AbstractBoat b) tr = Trajeto.descer(t, pos, b, new Vec3(m[1], m[2], m[3]), partial);
+				else if (m[7] == 2) tr = Trajeto.levantar(t, pos, new Vec3(m[1], m[2], m[3]), (float) m[4], (int) m[5]);
+			}
+			if (tr != null) { trajetos.put(id, tr); sl[7] = -1000; }
+		}
+		// lembra onde está montado (para o caminho de descer/levantar no quadro em que ele sai)
+		if (veiculo instanceof AbstractBoat b) { Vec3 l = Trajeto.local(b, partial, pos); montadoEm.put(id, new double[]{b.getId(), l.x, l.y, l.z, 0, 0, 0, 1}); }
+		else if (veiculo instanceof Assento as) montadoEm.put(id, new double[]{as.getId(), as.getX(), as.getY(), as.getZ(), as.getYRot(), as.tipo(), 0, 2});
+		else if (veiculo == null) montadoEm.remove(id);
+
+		Vec3 corpo = null;
+		AbstractBoat barcoTr = tr != null && tr.veiculo >= 0 && v.level().getEntity(tr.veiculo) instanceof AbstractBoat bb ? bb : null;
+		if (tr != null) {
+			corpo = tr.ponto(t, pos, barcoTr, partial);
+			if (corpo == null) { trajetos.remove(id); tr = null; } // o barco sumiu: vira um pulo comum
+		}
+		// pulo: mudou de lugar de uma vez sem trajeto (cama, testes): sai de onde o corpo estava, num arco
+		if (tr == null && visto && pos.distanceToSqr(sl[0], sl[1], sl[2]) > 0.9 * 0.9 && corpoAntes.distanceToSqr(pos) > 0.01) {
+			sl[4] = corpoAntes.x - pos.x; sl[5] = corpoAntes.y - pos.y; sl[6] = corpoAntes.z - pos.z;
 			sl[7] = t;
-			sl[9] = t - a0[1] < 4 ? tipoTroca : PULO;
-			sl[8] = duracao((int) sl[9], Math.sqrt(sl[4] * sl[4] + sl[6] * sl[6]));
-			u = 0;
-		} else if (mudou && (u >= 1 || (sl[9] == PULO && t - sl[7] < 4))) {
-			// subiu ou desceu sem pular longe (ou a troca de barco chegou logo depois do pulo): anima mesmo assim
-			if (u >= 1) { sl[4] = sl[5] = sl[6] = 0; sl[7] = t; u = 0; }
-			sl[9] = tipoTroca;
-			sl[8] = duracao(tipoTroca, Math.sqrt(sl[4] * sl[4] + sl[6] * sl[6]));
+			sl[8] = Math.min(20, 12 + 3 * Math.sqrt(sl[4] * sl[4] + sl[6] * sl[6]));
 		}
+		float u = (float) ((t - sl[7]) / sl[8]);
+		if (tr == null) {
+			double[] o = u < 1 ? pulo(u, sl[4], sl[5], sl[6]) : new double[3];
+			corpo = pos.add(o[0], o[1], o[2]);
+		}
+		d.saltoX = corpo.x - pos.x; d.saltoY = corpo.y - pos.y; d.saltoZ = corpo.z - pos.z;
 		sl[0] = pos.x; sl[1] = pos.y; sl[2] = pos.z; sl[3] = t;
-		boolean ativo = u < 1 && sl[9] != SEM;
-		o = ativo ? caminho((int) sl[9], u, sl[4], sl[5], sl[6]) : new double[3];
-		d.saltoX = o[0]; d.saltoY = o[1]; d.saltoZ = o[2];
-		d.trans = ativo ? (int) sl[9] : SEM;
-		d.transU = ativo ? u : 1f;
-		d.transDist = (float) Math.sqrt(sl[4] * sl[4] + sl[6] * sl[6]);
+		sl[10] = corpo.x; sl[11] = corpo.y; sl[12] = corpo.z;
 
-		// enquanto anda até o barco (ou até a doca), o corpo vira para onde está indo e depois volta
-		if (ativo && d.transDist > 0.3f && sl[9] != PULO) {
-			float rumo = (float) (Mth.atan2(sl[4], -sl[6]) * Mth.RAD_TO_DEG); // do lugar antigo para o novo
-			float w = switch (d.trans) {
-				case DESCER -> u < 0.35f ? 0f : Math.min(1f, Math.min((u - 0.35f) / 0.1f, (1f - u) / 0.25f));
-				default -> Math.min(1f, Math.min(u / 0.1f, (0.8f - u) / 0.15f));
-			};
-			w = AnimPesca.inOutSine(Math.max(0f, w));
-			float giro = Mth.wrapDegrees(rumo - st.bodyRot) * w;
-			st.bodyRot += giro;
-			st.yRot = Mth.clamp(st.yRot - giro, -60f, 60f); // a cabeça continua olhando para o mesmo lugar
-		}
+		if (tr != null) {
+			float[] f = tr.fase(t);
+			d.trans = tr.tipo; d.transFase = (int) f[0]; d.transV = f[1]; d.transPassos = tr.passos; d.transU = (t - tr.inicio) / tr.duracao();
+			d.transDist = tr.passos / 2.2f;
+		} else if (u < 1) {
+			d.trans = PULO; d.transFase = Trajeto.ANDA; d.transV = u; d.transU = u;
+			d.transDist = (float) Math.sqrt(sl[4] * sl[4] + sl[6] * sl[6]);
+			d.transPassos = Math.max(1, Math.round(d.transDist * 2.2f));
+		} else { d.trans = SEM; d.transU = 1f; }
 
-		// de pé (1) ou sentado (0): a troca normal leva 0,7 s; nas transições segue as fases delas
-		float peTroca = noBarco ? 1f - AnimPesca.inOutSine((t - a0[1]) / 14f) : AnimPesca.inOutSine((t - a0[1]) / 14f);
-		if (d.trans == SUBIR_TERRA || d.trans == SUBIR_AGUA) peTroca = 1f - AnimPesca.inOutSine((u - 0.75f) / 0.25f);
-		else if (d.trans == DESCER) peTroca = AnimPesca.inOutSine(u / 0.35f);
+		// giro do corpo: segue o rumo do caminho e nunca vira de uma vez
+		float alvoYaw = st.bodyRot;
+		if (tr != null) { float r = tr.rumo(t, pos, barcoTr, partial); if (!Float.isNaN(r)) alvoYaw = r; }
+		float[] g = giro.computeIfAbsent(id, k -> new float[]{st.bodyRot, t});
+		float dtg = Mth.clamp(t - g[1], 0f, 5f);
+		g[1] = t;
+		if (!visto) g[0] = alvoYaw;
+		g[0] += Mth.clamp(Mth.wrapDegrees(alvoYaw - g[0]), -15f * dtg, 15f * dtg);
+		float giroAplicado = Mth.wrapDegrees(g[0] - st.bodyRot);
+		st.bodyRot = g[0];
+		st.yRot = Mth.clamp(st.yRot - giroAplicado, -75f, 75f); // a cabeça continua olhando para o mesmo lugar
+
+		// de pé (1) ou sentado (0)
+		boolean encosto = veiculo instanceof Assento as && as.tipo() == Lugares.ENCOSTO;
+		float peTroca = tr != null ? tr.pe(t)
+				: montado ? 1f - AnimPesca.inOutSine((t - a0[1]) / 14f) : AnimPesca.inOutSine((t - a0[1]) / 14f);
+		if (encosto && tr == null) peTroca = 1f;
 		float pe = AnimPesca.peLuta(d.fase, d.tempo, d.lutou);
 		if (d.anim == AnimMarcio.CARINHO && d.animVar == 2) pe = Math.max(pe, 0.35f * AnimMarcio.peso(d.anim, d.animTempo)); // meio de pé para alcançar o Pinto
-		d.pe = noBarco ? Math.max(peTroca, pe) : peTroca;
-		d.sentado = noBarco || d.pe < 1f; // ainda terminando de levantar depois de descer
-	}
+		d.pe = montado ? Math.max(peTroca, pe) : peTroca;
+		d.sentado = (montado && !encosto) || d.pe < 1f;
 
-	private static float duracao(int tipo, double dist) {
-		return (float) switch (tipo) {
-			case SUBIR_TERRA -> Math.min(36, 24 + 4 * dist);
-			case SUBIR_AGUA -> Math.min(40, 30 + 3 * dist);
-			case DESCER -> Math.min(38, 26 + 4 * dist);
-			default -> Math.min(20, 12 + 3 * dist);
-		};
-	}
-
-	/** Desvio do corpo (lugar antigo - novo) que ainda falta andar no ponto 'u' (0..1) da transição. */
-	private static double[] caminho(int tipo, float u, double dx, double dy, double dz) {
-		float h, hv;
-		double arco = 0;
-		switch (tipo) {
-			case SUBIR_TERRA -> { // anda até a borda, passa a perna por cima (com um passo para cima) e senta
-				h = u < 0.45f ? 0.55f * io(u / 0.45f) : u < 0.75f ? 0.55f + 0.35f * io((u - 0.45f) / 0.3f) : 0.9f + 0.1f * io((u - 0.75f) / 0.25f);
-				hv = h;
-				if (u >= 0.45f && u < 0.75f) arco = 0.3 * Math.sin(Math.PI * (u - 0.45f) / 0.3f);
-			}
-			case SUBIR_AGUA -> { // nada até a borda, se agarra e se puxa para cima, depois senta
-				h = u < 0.35f ? 0.4f * io(u / 0.35f) : u < 0.7f ? 0.4f + 0.5f * io((u - 0.35f) / 0.35f) : 0.9f + 0.1f * io((u - 0.7f) / 0.3f);
-				hv = u < 0.35f ? 0.1f * io(u / 0.35f) : u < 0.7f ? 0.1f + 0.85f * io((u - 0.35f) / 0.35f) : 0.95f + 0.05f * io((u - 0.7f) / 0.3f);
-				if (u >= 0.35f && u < 0.7f) arco = 0.15 * Math.sin(Math.PI * (u - 0.35f) / 0.35f);
-			}
-			case DESCER -> { // levanta no lugar, passa a perna por cima da borda e anda até a doca
-				h = u < 0.35f ? 0f : u < 0.7f ? 0.75f * io((u - 0.35f) / 0.35f) : 0.75f + 0.25f * io((u - 0.7f) / 0.3f);
-				hv = h;
-				if (u >= 0.35f && u < 0.7f) arco = 0.3 * Math.sin(Math.PI * (u - 0.35f) / 0.35f);
-			}
-			default -> {
-				h = hv = io(u);
-				arco = Math.min(0.6, Math.sqrt(dx * dx + dz * dz) * 0.25) * Math.sin(Math.PI * u);
-			}
+		// assento (cadeira, chão, encosto): tipo e altura até o chão onde os pés ficam
+		d.assento = 0;
+		Vec3 a = null;
+		float aYaw = 0;
+		if (veiculo instanceof Assento as) { d.assento = as.tipo(); a = as.position(); aYaw = as.getYRot(); }
+		else if (tr != null && (tr.tipo == SENTAR || tr.tipo == LEVANTAR)) { d.assento = tr.assentoTipo; a = tr.assento; aYaw = tr.assentoYaw; }
+		if (a != null) {
+			float r = aYaw * Mth.DEG_TO_RAD;
+			float chao = d.assento == Lugares.CHAO || d.assento == Lugares.ENCOSTO ? 0f
+					: chao(v.level(), new Vec3(a.x - Mth.sin(r) * 0.55, a.y, a.z + Mth.cos(r) * 0.55), a.y, 1.5);
+			d.assentoAltura = Float.isNaN(chao) ? 0.5f : -chao;
 		}
-		return new double[]{dx * (1 - h), dy * (1 - hv) + arco, dz * (1 - h)};
+	}
+
+	/** Pulo comum (lugar antigo - novo): o desvio que falta em 'u' (0..1), num arco. */
+	private static double[] pulo(float u, double dx, double dy, double dz) {
+		float h = io(u);
+		double arco = Math.min(0.6, Math.sqrt(dx * dx + dz * dz) * 0.25) * Math.sin(Math.PI * u);
+		return new double[]{dx * (1 - h), dy * (1 - h) + arco, dz * (1 - h)};
+	}
+
+	/**
+	 * Os alvos de verdade para a pose procedural: borda do barco, cabeça do Pinto, chão embaixo de cada pé,
+	 * beirada à frente, de onde veio o susto e a pancada, mão de quem bate o hi five, livro.
+	 */
+	private static void alvos(Villager v, LivingEntityRenderState st, float t, float partial, DadosMarcio d) {
+		int id = v.getId();
+		Vec3 pos = v.getPosition(partial);
+		d.mx = pos.x + d.saltoX; d.my = pos.y + d.saltoY; d.mz = pos.z + d.saltoZ;
+		d.myaw = st.bodyRot;
+		Entity veiculo = v.getVehicle();
+		Trajeto tr = trajetos.get(id);
+		AbstractBoat barco = veiculo instanceof AbstractBoat b ? b
+				: tr != null && tr.veiculo >= 0 && v.level().getEntity(tr.veiculo) instanceof AbstractBoat b2 ? b2 : null;
+		d.bordaEsq = null;
+		if (barco != null) d.bordaEsq = tr != null && d.transFase == Trajeto.PASSA ? tr.bordaDaPassagem(pos, barco, partial)
+				: Trajeto.mundo(barco, partial, new Vec3(Trajeto.LADO - 0.05, Trajeto.BORDA, 0.25)); // borda à esquerda dele
+		d.pinto = null;
+		if (veiculo != null)
+			for (Entity e : veiculo.getPassengers())
+				if (Pescador.ehPinto(e) && e instanceof net.minecraft.world.entity.LivingEntity c) {
+					float yb = Mth.rotLerp(partial, c.yBodyRotO, c.yBodyRot) * Mth.DEG_TO_RAD;
+					d.pinto = c.getPosition(partial).add(-Mth.sin(yb) * 0.18, 0.62, Mth.cos(yb) * 0.18);
+				}
+
+		// pés: altura do chão embaixo de cada um (em pé, em terra, fora de transição)
+		d.chaoD = d.chaoE = Float.NaN;
+		boolean emPe = veiculo == null && d.trans == SEM && d.nado < 0.1f;
+		if (emPe) {
+			d.chaoD = chao(v.level(), Ik.mundo(d, -1.9f, 24f, 0f), pos.y, 1.2);
+			d.chaoE = chao(v.level(), Ik.mundo(d, 1.9f, 24f, 0f), pos.y, 1.2);
+		}
+		// beirada: quando o pé da frente chega num buraco (ou na água) de repente, se equilibra por 2 s
+		float[] bd = beiradas.computeIfAbsent(id, k -> new float[]{-1000f, 0f, 0f});
+		boolean buraco = false;
+		if (emPe && v.onGround()) {
+			float r = st.bodyRot * Mth.DEG_TO_RAD;
+			buraco = Float.isNaN(chao(v.level(), new Vec3(pos.x - Mth.sin(r) * 0.5, pos.y, pos.z + Mth.cos(r) * 0.5), pos.y, 1.3));
+		}
+		if (buraco && bd[2] == 0 && t > bd[1]) { bd[0] = t; bd[1] = t + 300; }
+		bd[2] = buraco ? 1 : 0;
+		float eb = t - bd[0];
+		d.beirada = eb < 40 ? io(Math.min(eb / 4f, (40 - eb) / 14f)) : 0f;
+
+		// reações vindas do servidor
+		Reac[] rs = reacoes.get(id);
+		d.sustoT = d.ofereceT = d.bateT = d.livroT = d.guardaT = 999f;
+		d.susto = d.maoDe = null;
+		if (rs != null) {
+			Reac r;
+			if ((r = rs[Pacotes.Reacao.SUSTO]) != null) { d.sustoT = t - r.t0(); d.susto = r.onde(); }
+			if ((r = rs[Pacotes.Reacao.LIVRO]) != null) d.livroT = t - r.t0();
+			if ((r = rs[Pacotes.Reacao.GUARDA]) != null) d.guardaT = t - r.t0();
+			Reac of = rs[Pacotes.Reacao.OFERECE], ba = rs[Pacotes.Reacao.BATE];
+			if (of != null) d.ofereceT = t - of.t0();
+			if (ba != null) d.bateT = t - ba.t0();
+			Reac ult = ba != null && (of == null || ba.t0() >= of.t0()) ? ba : of;
+			if (ult != null) {
+				Entity quem = ult.alvo() >= 0 ? v.level().getEntity(ult.alvo()) : null;
+				d.maoDe = quem != null ? quem.getEyePosition(partial) : ult.onde();
+			}
+			if (ba != null && of != null && ba.t0() >= of.t0()) d.ofereceT = 999f; // já bateram: para de oferecer
+		}
+		d.livro = v.getMainHandItem().is(net.minecraft.world.item.Items.BOOK);
+		d.andar = st.walkAnimationSpeed;
+		// pancada: recua para o lado contrário de onde veio
+		d.dorT = 999f;
+		d.dorDe = null;
+		if (v.hurtTime > 0) {
+			d.dorT = 10 - v.hurtTime + partial;
+			var src = v.getLastDamageSource();
+			d.dorDe = src != null ? src.getSourcePosition() : null;
+		}
+	}
+
+	/** Altura do chão embaixo do ponto (relativa a 'y', procurando até 'fundo' blocos para baixo), ou NaN se não tem. */
+	static float chao(net.minecraft.world.level.Level level, Vec3 p, double y, double fundo) {
+		int x = Mth.floor(p.x), z = Mth.floor(p.z);
+		double lx = p.x - x, lz = p.z - z;
+		for (int by = Mth.floor(y + 0.6); by >= Mth.floor(y - fundo); by--) {
+			net.minecraft.core.BlockPos bp = new net.minecraft.core.BlockPos(x, by, z);
+			var st = level.getBlockState(bp);
+			double topo = Double.NaN;
+			for (net.minecraft.world.phys.AABB b : st.getCollisionShape(level, bp).toAabbs())
+				if (lx >= b.minX - 0.05 && lx <= b.maxX + 0.05 && lz >= b.minZ - 0.05 && lz <= b.maxZ + 0.05 && by + b.maxY <= y + 0.6)
+					topo = Double.isNaN(topo) ? by + b.maxY : Math.max(topo, by + b.maxY);
+			if (!Double.isNaN(topo)) return topo - y < -fundo ? Float.NaN : (float) (topo - y);
+		}
+		return Float.NaN;
 	}
 
 	private static float io(float u) { return AnimPesca.inOutSine(u); }

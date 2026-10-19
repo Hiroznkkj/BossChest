@@ -84,5 +84,33 @@ Por enquanto essas aparecem só no balão, sem voz. Roteiro para colar no Eleven
 | Alta: o dia de bêbado fica mudo sem elas | `bebado_8` | [drunken voice] Eu amo vocês, sabia? [voice breaking] Amo até o Pinto. | Eu amo vocês, sabia? Amo até o Pinto. |
 | Baixa | `sem_doca_1` | [sighing] Sem doca... durmo aqui mesmo. | Sem doca... durmo aqui mesmo. |
 | Baixa | `sem_doca_2` | Barco também é cama, né Pinto? | Barco também é cama, né Pinto? |
+| Média: fugindo de monstro | `medo_1` | [gasping] Bicho! Rema, Pinto, rema! | Bicho! Rema, Pinto, rema! |
+| Média: fugindo de monstro | `medo_2` | [panting] Sai pra lá, assombração! | Sai pra lá, assombração! |
+| Média: fugindo de monstro | `medo_3` | [angry] Hoje não, zumbi! | Hoje não, zumbi! |
+| Média: fugindo de monstro | `medo_4` | [gasping] Vou pra doca, que aqui tá perigoso! | Vou pra doca, que aqui tá perigoso! |
+| Média: raio por perto | `raio_1` | [gasping] Nossa Senhora! Essa foi perto! | Nossa Senhora! Essa foi perto! |
+| Média: raio por perto | `raio_2` | [shouting] Raio! Corre, corre! | Raio! Corre, corre! |
+| Média: raio por perto | `raio_3` | [panting] Ai meu Deus, quase me pegou! | Ai meu Deus, quase me pegou! |
+| Média: hi five (oferece a mão) | `toca_1` | [excited] Toca aqui! | Toca aqui! |
+| Média: hi five (oferece a mão) | `toca_2` | Bate aqui, parceiro! | Bate aqui, parceiro! |
+| Média: hi five (oferece a mão) | `toca_3` | [chuckling] Dá cá essa mão! | Dá cá essa mão! |
+| Média: hi five (bateram) | `bateu_1` | [laughing] Isso aí! | Isso aí! |
+| Média: hi five (bateram) | `bateu_2` | [excited] Boa! | Boa! |
+| Média: hi five (bateram) | `bateu_3` | [chuckling] Essa doeu, hein! | Essa doeu, hein! |
+| Média: apanhou | `apanhou_1` | [angry] Ai! Que isso? | Ai! Que isso? |
+| Média: apanhou | `apanhou_2` | [annoyed] Ei! Respeita o pescador! | Ei! Respeita o pescador! |
+| Média: apanhou | `apanhou_3` | Ai, minha costela! | Ai, minha costela! |
+| Baixa: buscando o barco | `busca_1` | [sighing] Cadê meu barco? | Cadê meu barco? |
+| Baixa: buscando o barco | `busca_2` | Peraí, Pinto, tô indo! | Peraí, Pinto, tô indo! |
+| Baixa: buscando o barco | `busca_3` | [panting] Barquinho, volta aqui! | Barquinho, volta aqui! |
+| Baixa: corda no barco afundado | `corda_1` | [panting] Segura essa corda, barquinho! | Segura essa corda, barquinho! |
+| Baixa: corda no barco afundado | `corda_2` | [sharp exhale] Vem cá, sobe, sobe! | Vem cá, sobe, sobe! |
+| Baixa: lendo | `leitura_1` | [softly] Hmm... onde eu parei... | Hmm... onde eu parei... |
+| Baixa: lendo | `leitura_2` | [whispering] Capítulo sete: o peixe gigante. | Capítulo sete: o peixe gigante. |
+| Baixa: lendo | `leitura_3` | [chuckling] Esse livro é melhor que o filme. | Esse livro é melhor que o filme. |
+| Baixa: papo sentado no chão | `papo_1` | Senta aí, deixa eu te contar uma do Pinto. | Senta aí, deixa eu te contar uma do Pinto. |
+| Baixa: papo sentado no chão | `papo_2` | [sighing] A vida de pescador é boa, viu. | A vida de pescador é boa, viu. |
+| Baixa: papo sentado no chão | `papo_3` | Sabe o que eu queria? Um barco com dois baús. | Sabe o que eu queria? Um barco com dois baús. |
+| Baixa: papo sentado no chão | `papo_4` | [chuckling] Uma vez eu pesquei uma bota. Uso até hoje. | Uma vez eu pesquei uma bota. Uso até hoje. |
 
 Opcionais (o tipo já tem voz, seriam só mais variedade): mais frases de acordar, anoitecer, bocejo e carinho.

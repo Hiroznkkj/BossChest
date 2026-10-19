@@ -56,7 +56,7 @@ public final class Pescador {
 	private static final int LONGE_DE_CASA = 48, BUSCA_MAX = 900;
 	private static final double VELOCIDADE = 0.07;
 
-	private enum Modo { NAVEGANDO, INDO_DOCA, PARADO_NOITE, EM_TERRA, VOLTANDO, PERSEGUINDO, FUGINDO, BUSCANDO }
+	private enum Modo { NAVEGANDO, INDO_DOCA, PARADO_NOITE, EM_TERRA, VOLTANDO, PERSEGUINDO, FUGINDO, BUSCANDO, INDO_SENTAR, SENTADO }
 	/** Até onde ele procura o barco quando fica sem ele. */
 	private static final int RAIO_BARCO = 25;
 
@@ -92,6 +92,15 @@ public final class Pescador {
 		int ancoraT, puxando; // desde quando está ali; ticks puxando o barco afundado pela corda
 		boolean sair; // preso no mesmo lugar (beco, canal estreito): não pesca até sair dali
 		int deslizarAte; // depois de encalhar 2 vezes: empurra o barco com o remo pelo meio do caminho até lá
+		// sentar: para onde vai, o modo para voltar depois, até quando fica, livro, papo com quem
+		Modo antes;
+		Lugares.Lugar lugar;
+		int sentadoAte, duracaoSentado, livroEm, proximoPapo, sentouNoite = -100000;
+		boolean lendo;
+		UUID papoCom;
+		int correrAte; // correndo de um raio: não mexe no caminho dele
+		int hiFiveEm, hiFiveAte, doeuEm; // oferecer a mão (depois do oi), até quando oferece, última reclamação de pancada
+		UUID hiFiveCom;
 		boolean bebado; // de vez em quando acorda bêbado: fala bobagem e rema torto o dia todo
 		// /bauchefe marcio testar: resultado forçado da pesca, mordida rápida, fora do barco até, fila do "tudo"
 		Boolean testeFisga, testeDificil;
@@ -126,6 +135,7 @@ public final class Pescador {
 				vida(level, v, s);
 				if (s.remontarEm > 0) { if (relogio >= s.remontarEm) remontar(level, v, s); continue; } // teste fora do barco
 				if (s.demo != null) demo(level, v, s);
+				if (s.modo == Modo.INDO_SENTAR || s.modo == Modo.SENTADO) { sentar(level, v, s); continue; }
 				if (s.modo == Modo.PERSEGUINDO) { perseguir(level, v, s); continue; }
 				if (s.modo == Modo.BUSCANDO) { if (!buscar(level, v, s)) it.remove(); continue; }
 				if (s.modo == Modo.EM_TERRA || s.modo == Modo.VOLTANDO) { if (!emTerra(level, v, s)) it.remove(); continue; }
@@ -700,6 +710,19 @@ public final class Pescador {
 		if (barco != null && !barco.hasPassenger(Pescador::ehPescador)) frear(barco, 0); // barco atracado
 		if (barco != null && relogio % 20 == 0) limparBarco(barco);
 		if (s.modo == Modo.EM_TERRA) {
+			// começo da noite, ainda acordado: uma vez por noite senta um pouco (lê, conversa ou se encosta)
+			long hora = level.getOverworldClockTime() % 24000;
+			if (noite(level) && !v.isSleeping() && hora < 13800 && relogio - s.sentouNoite > 6000 && relogio % 20 == 0) {
+				s.sentouNoite = relogio;
+				RandomSource r = level.getRandom();
+				Player p = level.getNearestPlayer(v, 8);
+				Lugares.Lugar l = r.nextFloat() < 0.7f ? Lugares.assento(level, v, 10) : null;
+				if (l != null) irSentar(v, s, l, true, 500 + r.nextInt(400), null);
+				else if (p != null && (l = Lugares.chao(level, v, p.position())) != null) irSentar(v, s, l, false, 400 + r.nextInt(300), p.getUUID());
+				else if (r.nextFloat() < 0.5f && (l = Lugares.encosto(level, v, 6)) != null) irSentar(v, s, l, false, 300 + r.nextInt(300), null);
+				else if (r.nextFloat() < 0.5f && (l = Lugares.deitar(level, v, 5)) != null) irSentar(v, s, l, false, 300 + r.nextInt(300), null); // olhando as estrelas
+				if (s.modo != Modo.EM_TERRA) return true;
+			}
 			if (!noite(level) && !v.isSleeping()) {
 				s.modo = Modo.VOLTANDO; s.voltando = 0;
 				// mais ou menos 1 dia em 8 acorda bêbado; às vezes conta o sonho
@@ -722,6 +745,7 @@ public final class Pescador {
 		if (barco.isUnderWater()) { s.modo = Modo.BUSCANDO; s.voltando = 0; return true; } // afundou de noite: vai buscar com a corda
 		// anda até a beira, do lado do barco, e sobe (o cliente anima o passo para dentro do barco)
 		if (alcanca(v, barco, s.voltando)) { embarcar(level, v, barco, s); return true; }
+		if (relogio < s.correrAte) return true; // correndo de um raio
 		if (s.voltando % 10 == 1) {
 			BlockPos beira = beira(level, barco);
 			if (beira == null) beira = s.doca != null ? s.doca : barco.blockPosition();
@@ -895,6 +919,8 @@ public final class Pescador {
 
 	/** Anda até o ponto; na água vai nadando direto (sem dar a volta por terra). */
 	private static void irAte(Villager v, Vec3 alvo, int t) {
+		Estado e = estados.get(v.getUUID());
+		if (e != null && relogio < e.correrAte) return; // correndo de um raio
 		if (v.isInWater()) {
 			v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
 			Vec3 d = new Vec3(alvo.x - v.getX(), 0, alvo.z - v.getZ());
@@ -949,6 +975,126 @@ public final class Pescador {
 		}
 	}
 
+	// ---------- sentar, raio, hi five ----------
+
+	/** Vai até o lugar e senta (ou se encosta) por 'ticks'; lendo um livro, ou de papo com alguém. */
+	private static void irSentar(Villager v, Estado s, Lugares.Lugar l, boolean ler, int ticks, UUID papo) {
+		if (s.modo != Modo.INDO_SENTAR && s.modo != Modo.SENTADO) s.antes = s.modo;
+		s.lugar = l;
+		s.lendo = ler;
+		s.duracaoSentado = ticks;
+		s.papoCom = papo;
+		s.modo = Modo.INDO_SENTAR;
+		s.voltando = 0;
+	}
+
+	private static void sentar(ServerLevel level, Villager v, Estado s) {
+		if (s.modo == Modo.INDO_SENTAR) {
+			s.voltando++;
+			Lugares.Lugar l = s.lugar;
+			double h = Math.pow(l.pe().x - v.getX(), 2) + Math.pow(l.pe().z - v.getZ(), 2);
+			if (h < 0.7 * 0.7 && Math.abs(l.pe().y - v.getY()) < 1.3) {
+				// chegou na frente do lugar: senta (o cliente vira, abaixa ou dá o pulinho até a altura do assento)
+				if (l.tipo() == Lugares.VEICULO) {
+					if (!l.veiculo().isAlive() || !l.veiculo().getPassengers().isEmpty() || !v.startRiding(l.veiculo(), true, true)) { pararDeSentar(v, s); return; }
+				} else v.startRiding(Assento.em(level, l.tipo(), l.assento(), l.yaw(), v.position()), true, true);
+				v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+				v.getNavigation().stop();
+				s.modo = Modo.SENTADO;
+				s.sentadoAte = relogio + s.duracaoSentado;
+				s.livroEm = s.lendo ? relogio + 30 : 0;
+				s.proximoPapo = relogio + 60;
+				return;
+			}
+			if (s.voltando > 400) { pararDeSentar(v, s); return; } // não conseguiu chegar
+			if (s.voltando % 5 == 1) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(l.pe(), 0.55f, 0));
+			return;
+		}
+		// sentado
+		if (!v.isPassenger() || v.getVehicle() instanceof AbstractBoat) { pararDeSentar(v, s); return; }
+		v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+		if (s.lendo && s.livroEm > 0) {
+			// tira o livro do bolso: a mão vai ao bolso e o livro aparece na mão quando ela volta
+			if (relogio == s.livroEm - 12) reagir(v, Pacotes.Reacao.LIVRO, -1, v.position());
+			if (relogio >= s.livroEm) { v.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.BOOK)); v.setDropChance(EquipmentSlot.MAINHAND, 0f); s.livroEm = 0; }
+		}
+		Player com = s.papoCom == null ? null : level.getPlayerByUUID(s.papoCom);
+		if (com != null && com.distanceToSqr(v) < 10 * 10) v.getLookControl().setLookAt(com, 30f, 30f);
+		if (relogio >= s.proximoPapo) {
+			s.proximoPapo = relogio + 240 + level.getRandom().nextInt(200);
+			if (com != null && com.distanceToSqr(v) < 10 * 10) falar(level, v, s, Falas.Tipo.PAPO, com.getName().getString(), true);
+			else if (s.lendo && level.getRandom().nextFloat() < 0.3f) falar(level, v, s, Falas.Tipo.LEITURA, null, false);
+		}
+		boolean perigo = relogio % 10 == 0 && !level.getEntities((Entity) null, v.getBoundingBox().inflate(10), e -> e instanceof Enemy && e.isAlive()).isEmpty();
+		if (relogio >= s.sentadoAte || perigo || (s.papoCom != null && com == null)) levantar(v, s);
+	}
+
+	/** Levanta e volta para o que estava fazendo (guarda o livro primeiro). */
+	private static void levantar(Villager v, Estado s) {
+		if (v.getMainHandItem().is(Items.BOOK)) {
+			reagir(v, Pacotes.Reacao.GUARDA, -1, v.position());
+			v.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+		}
+		v.stopRiding();
+		pararDeSentar(v, s);
+	}
+
+	private static void pararDeSentar(Villager v, Estado s) {
+		s.modo = s.antes != null ? s.antes : Modo.EM_TERRA;
+		s.antes = null;
+		s.lugar = null;
+		s.papoCom = null;
+		s.voltando = 0;
+		if (s.modo != Modo.EM_TERRA) segurarVara(v);
+	}
+
+	/** Raio caiu: quem estiver a até 24 blocos se assusta; em terra, levanta (se estiver sentado) e corre para longe. */
+	public static void raio(ServerLevel level, Vec3 onde) {
+		for (var en : estados.entrySet()) {
+			if (!(level.getEntity(en.getKey()) instanceof Villager v) || v.distanceToSqr(onde) > 24 * 24 || v.isSleeping()) continue;
+			Estado s = en.getValue();
+			reagir(v, Pacotes.Reacao.SUSTO, -1, onde);
+			falar(level, v, s, Falas.Tipo.RAIO, null, true);
+			if (v.getVehicle() instanceof AbstractBoat) continue; // no barco só leva o susto
+			if (s.modo == Modo.SENTADO || s.modo == Modo.INDO_SENTAR) levantar(v, s);
+			Vec3 foge = v.position().subtract(onde).multiply(1, 0, 1);
+			foge = foge.lengthSqr() < 0.01 ? new Vec3(1, 0, 0) : foge.normalize();
+			v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(v.position().add(foge.scale(8)), 0.9f, 1));
+			s.correrAte = relogio + 80;
+		}
+	}
+
+	/** Levanta a mão para o "toca aqui", virado para quem ele cumprimentou. */
+	private static void oferecerMao(ServerLevel level, Villager v, Estado s) {
+		s.hiFiveEm = 0;
+		Player p = s.hiFiveCom == null ? null : level.getPlayerByUUID(s.hiFiveCom);
+		if (p == null || p.distanceToSqr(v) > 6 * 6 || s.boia != null) return;
+		s.hiFiveAte = relogio + 100;
+		s.olharEnt = p;
+		s.olharAte = s.hiFiveAte;
+		reagir(v, Pacotes.Reacao.OFERECE, p.getId(), p.getEyePosition());
+		falar(level, v, s, Falas.Tipo.TOCA, null, true);
+	}
+
+	/** O jogador bateu no Márcio enquanto ele oferecia a mão: é um hi five (não machuca). */
+	public static boolean hiFive(Player p, Entity e) {
+		if (!(e instanceof Villager v) || !ehPescador(v) || !(v.level() instanceof ServerLevel level)) return false;
+		Estado s = estados.get(v.getUUID());
+		if (s == null || relogio > s.hiFiveAte || p.distanceToSqr(v) > 4.5 * 4.5) return false;
+		s.hiFiveAte = 0;
+		reagir(v, Pacotes.Reacao.BATE, p.getId(), p.getEyePosition());
+		Vec3 meio = v.getEyePosition().add(p.getEyePosition()).scale(0.5).add(0, 0.25, 0);
+		level.playSound(null, meio.x, meio.y, meio.z, SoundEvents.PLAYER_ATTACK_WEAK, SoundSource.NEUTRAL, 0.8f, 1.6f);
+		level.sendParticles(ParticleTypes.CRIT, meio.x, meio.y, meio.z, 8, 0.1, 0.1, 0.1, 0.15);
+		falar(level, v, s, Falas.Tipo.BATEU, null, true);
+		return true;
+	}
+
+	private static void reagir(Villager v, int tipo, int alvo, Vec3 onde) {
+		Pacotes.Reacao r = new Pacotes.Reacao(v.getId(), tipo, alvo, onde.x, onde.y, onde.z);
+		for (ServerPlayer p : PlayerLookup.tracking(v)) ServerPlayNetworking.send(p, r);
+	}
+
 	// ---------- fuga ----------
 
 	/** Monstro mais perto do barco, a até 'raio' blocos, ou null. */
@@ -988,6 +1134,9 @@ public final class Pescador {
 
 	/** Cumprimenta quem chega perto (uma vez a cada 5 min por jogador) e às vezes brinca com o Pinto. */
 	private static void vida(ServerLevel level, Villager v, Estado s) {
+		// apanhou: reclama (o cliente faz ele recuar para o lado contrário da pancada)
+		if (v.hurtTime > 0 && relogio >= s.doeuEm) { s.doeuEm = relogio + 100; falar(level, v, s, Falas.Tipo.APANHOU, null, true); }
+		if (s.hiFiveEm > 0 && relogio >= s.hiFiveEm) oferecerMao(level, v, s);
 		if (relogio % 20 != 0) return;
 		RandomSource r = level.getRandom();
 		for (ServerPlayer p : level.players()) {
@@ -998,6 +1147,8 @@ public final class Pescador {
 				s.cumprimentou.put(p.getUUID(), relogio);
 				s.olharEnt = p;
 				s.olharAte = relogio + 60;
+				// às vezes oferece a mão para um "toca aqui" logo depois do oi
+				if (r.nextFloat() < 0.35f && s.boia == null) { s.hiFiveEm = relogio + 40; s.hiFiveCom = p.getUUID(); }
 				if (relogio >= s.proximaAnim && s.boia == null && relogio >= s.animFim && v.getVehicle() instanceof AbstractBoat b)
 					comecarAnim(level, v, b, s, r, AnimMarcio.ACENAR);
 			}
@@ -1150,7 +1301,10 @@ public final class Pescador {
 
 	/** Nomes aceitos pelo /bauchefe marcio testar. */
 	public static final List<String> TESTES = List.of("tudo", "espreguicar", "cocar", "acenar", "comemorar", "carinho",
-			"pesca", "peixedificil", "vazio", "nadar", "levantar", "fala");
+			"pesca", "peixedificil", "vazio", "nadar", "levantar", "fala", "susto", "raio", "hifive", "subir", "sentar", "livro",
+			"chao", "encostar", "deitar");
+	/** Testes que levam ele para terra (descendo do barco, se estiver nele). */
+	private static final List<String> TESTES_TERRA = List.of("subir", "sentar", "livro", "chao", "encostar", "deitar");
 	private static final List<String> TESTES_TUDO = List.of("levantar", "espreguicar", "cocar", "acenar", "carinho",
 			"pesca", "peixedificil", "vazio", "comemorar", "fala", "nadar");
 
@@ -1164,8 +1318,21 @@ public final class Pescador {
 		}
 		if (!TESTES.contains(qual)) return "§cNão conheço \"" + qual + "\". Opções: " + String.join(", ", TESTES);
 		if (v == null) return "§cNenhum pescador num raio de 64 blocos";
-		if (!(v.getVehicle() instanceof AbstractBoat barco)) return "§cO pescador precisa estar no barco";
 		Villager dono = v;
+		if (TESTES_TERRA.contains(qual)) {
+			Estado s = estados.computeIfAbsent(v.getUUID(), u -> { Estado n = new Estado(); n.casa = dono.blockPosition(); return n; });
+			return testarTerra(level, v, s, qual, origem);
+		}
+		if (qual.equals("raio")) { // raio de verdade (só visual, não queima nada) a 7 blocos dele
+			net.minecraft.world.entity.LightningBolt raio = EntityTypes.LIGHTNING_BOLT.create(level, EntitySpawnReason.COMMAND);
+			if (raio == null) return "§cnão deu para criar o raio";
+			double a = level.getRandom().nextDouble() * Math.PI * 2;
+			raio.snapTo(v.getX() + Math.cos(a) * 7, v.getY(), v.getZ() + Math.sin(a) * 7);
+			raio.setVisualOnly(true);
+			level.addFreshEntity(raio);
+			return "";
+		}
+		if (!(v.getVehicle() instanceof AbstractBoat barco)) return "§cO pescador precisa estar no barco";
 		Estado s = estados.computeIfAbsent(v.getUUID(), u -> { Estado n = new Estado(); n.casa = dono.blockPosition(); return n; });
 		s.barco = barco.getUUID();
 		s.modo = Modo.NAVEGANDO;
@@ -1234,6 +1401,17 @@ public final class Pescador {
 				v.stopRiding();
 				s.remontarEm = relogio + 50;
 			}
+			case "susto" -> { // susto de alguma coisa à frente e à esquerda dele
+				double rad = v.getYRot() * Mth.DEG_TO_RAD;
+				reagir(v, Pacotes.Reacao.SUSTO, -1, v.position().add(-Mth.sin(rad) * 4 + Mth.cos(rad) * 3, 1, Mth.cos(rad) * 4 + Mth.sin(rad) * 3));
+				falar(level, v, s, Falas.Tipo.MEDO, null, true);
+			}
+			case "hifive" -> {
+				Player p = level.getNearestPlayer(v, 6);
+				if (p == null) return "§cprecisa de alguém a até 6 blocos (depois é só bater nele)";
+				s.hiFiveCom = p.getUUID();
+				oferecerMao(level, v, s);
+			}
 			case "fala" -> {
 				Falas.Tipo[] tipos = {Falas.Tipo.PIADA, Falas.Tipo.PINTO, Falas.Tipo.SONHO, Falas.Tipo.CANCAO};
 				falar(level, v, s, tipos[r.nextInt(tipos.length)], null, true);
@@ -1241,6 +1419,55 @@ public final class Pescador {
 			default -> { return "§c?"; }
 		}
 		return "";
+	}
+
+	/**
+	 * Testes em terra: desce do barco para a beira mais perto (do lado de trás, no "subir", para ver ele dar a
+	 * volta no barco) e vai sentar, ler, sentar no chão ou se encostar; no fim volta e sobe no barco de novo.
+	 */
+	private static String testarTerra(ServerLevel level, Villager v, Estado s, String qual, Vec3 origem) {
+		AbstractBoat barco = v.getVehicle() instanceof AbstractBoat b ? b : s.barco != null && level.getEntity(s.barco) instanceof AbstractBoat b2 ? b2 : null;
+		if (barco != null && v.getVehicle() == barco) {
+			BlockPos beira = qual.equals("subir") ? beiraAtras(level, barco) : beira(level, barco);
+			if (beira == null) beira = beiraAtras(level, barco); // teste: aceita terra um pouco mais longe
+			if (beira == null) return "§cnão achei terra firme colada no barco";
+			largarBoia(s);
+			s.animFim = 0;
+			v.stopRiding();
+			v.teleportTo(beira.getX() + 0.5, beira.getY(), beira.getZ() + 0.5);
+			s.barco = barco.getUUID();
+		}
+		if (barco == null) return "§co pescador precisa de um barco por perto";
+		s.modo = Modo.VOLTANDO; // ao terminar, volta para o barco
+		s.voltando = 0;
+		if (qual.equals("subir")) return "";
+		Player p = level.getNearestPlayer(v, 12);
+		Lugares.Lugar l = switch (qual) {
+			case "chao" -> Lugares.chao(level, v, p != null ? p.position() : origem);
+			case "encostar" -> Lugares.encosto(level, v, 16);
+			case "deitar" -> Lugares.deitar(level, v, 6);
+			default -> Lugares.assento(level, v, 10);
+		};
+		if (l == null) return "§cnão achei lugar para " + qual + " por perto";
+		irSentar(v, s, l, qual.equals("livro"), 300, qual.equals("chao") && p != null ? p.getUUID() : null);
+		return "§7(" + switch (l.tipo()) { case Lugares.VEICULO -> "carrinho"; case Lugares.CHAO -> "chão"; case Lugares.ENCOSTO -> "parede"; case Lugares.DEITADO -> "deitado"; default -> "assento"; }
+				+ String.format(" a %.1f blocos, altura %.2f)", Math.sqrt(l.pe().distanceToSqr(v.position())), l.assento().y - l.pe().y);
+	}
+
+	/** Beira em terra do lado de trás (popa) do barco, para o teste de subir dando a volta. */
+	private static BlockPos beiraAtras(Level level, AbstractBoat barco) {
+		double rad = barco.getYRot() * Mth.DEG_TO_RAD;
+		Vec3 tras = barco.position().add(Mth.sin(rad) * 1.2, 0, -Mth.cos(rad) * 1.2);
+		BlockPos melhor = null;
+		double best = Double.MAX_VALUE;
+		BlockPos b = barco.blockPosition();
+		for (int dx = -6; dx <= 6; dx++) for (int dz = -6; dz <= 6; dz++) for (int dy = -1; dy <= 2; dy++) {
+			BlockPos q = b.offset(dx, dy, dz);
+			if (Lugares.piso(level, q) == null) continue;
+			double d = Vec3.atBottomCenterOf(q).distanceToSqr(tras.x, q.getY(), tras.z);
+			if (d < best) { best = d; melhor = q; }
+		}
+		return melhor;
 	}
 
 	/** Volta para o barco depois de um teste fora dele. */

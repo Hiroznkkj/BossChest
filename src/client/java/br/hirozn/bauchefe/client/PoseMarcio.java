@@ -3,6 +3,7 @@ package br.hirozn.bauchefe.client;
 import br.hirozn.bauchefe.AnimMarcio;
 import br.hirozn.bauchefe.AnimPesca;
 import br.hirozn.bauchefe.Falas;
+import br.hirozn.bauchefe.Lugares;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.util.Mth;
 
@@ -46,9 +47,11 @@ public final class PoseMarcio {
 		head.y -= 0.12f * resp;
 		if (!exportando) head.zRot += 0.02f * Mth.sin(age * 0.05f + r * 2f); // inclina a cabeça de leve, à toa
 
-		if (d.sentado) levantar(d, age, r, root, head, body, dir, esq, pernaD, pernaE);
+		if (d.assento != 0) sentarAssento(d, age, root, head, body, dir, esq, pernaD, pernaE);
+		else if (d.sentado) levantar(d, age, r, root, head, body, dir, esq, pernaD, pernaE);
 
 		emPe(d, root, head, body, esq, pernaD, pernaE);
+		if (!exportando) pesFirmes(d, root, pernaD, pernaE);
 		if (!exportando) {
 			// customizadas (AnimCustom) no lugar das do código: a fase da pesca, ou "parado" sentado no barco
 			AnimCustom.Anim c = pescando ? AnimCustom.get(AnimPesca.NOMES[d.fase]) : AnimCustom.get(AnimCustom.PARADO);
@@ -57,7 +60,15 @@ public final class PoseMarcio {
 		}
 		transicao(d, age, head, body, dir, esq, pernaD, pernaE, root);
 		especial(d, root, head, body, dir, esq, pernaD, pernaE);
-		if (!exportando) expressao(d, age, root, head, body, dir, esq);
+		if (!exportando) {
+			// reações procedurais por cima de tudo (somam com o que estiver acontecendo, até no meio de sentar)
+			livro(d, age, root, head, dir, esq);
+			hiFive(d, root, head, body, esq);
+			beirada(d, age, root, head, dir, esq);
+			susto(d, age, root, head, dir, esq);
+			dor(d, root, head, dir, esq);
+			expressao(d, age, root, head, body, dir, esq);
+		}
 		// /marcioanim tocar: entra e sai em 8 ticks
 		if (d.teste != null) {
 			float dur = d.teste.duracao() * 20f, w = AnimPesca.inOutSine(Math.min(d.testeTempo / 8f, (dur - d.testeTempo) / 8f));
@@ -85,22 +96,45 @@ public final class PoseMarcio {
 		head.xRot += 0.25f * impulso; // olha para onde vai pisar
 		// subindo da água as duas mãos já estão na borda (transicao cuida delas)
 		// a mão faz força no começo de levantar (e no fim de sentar), quando o ombro ainda está baixo
-		if (d.trans != MarcioCliente.SUBIR_AGUA || d.transU > 0.75f) apoio(esq, Mth.sin(Mth.PI * AnimPesca.clamp(pe * 1.5f)));
 		if (d.fase == AnimPesca.NADA) dir.xRot -= 0.3f * impulso;
 
 		// balanço junto com o barco, girando em torno do assento (12 px abaixo do pivô do root)
-		if (exportando) return;
-		float bz = 0.035f * sentado * Mth.sin(age * 0.07f + r), bx = 0.02f * sentado * Mth.sin(age * 0.05f + r * 1.3f);
-		root.zRot += bz;
-		root.xRot += bx;
-		root.x += 12f * Mth.sin(bz);
-		root.y += 12f * (1f - Mth.cos(bz)) + 12f * (1f - Mth.cos(bx));
-		root.z -= 12f * Mth.sin(bx);
+		if (!exportando) {
+			float bz = 0.035f * sentado * Mth.sin(age * 0.07f + r), bx = 0.02f * sentado * Mth.sin(age * 0.05f + r * 1.3f);
+			root.zRot += bz;
+			root.xRot += bx;
+			root.x += 12f * Mth.sin(bz);
+			root.y += 12f * (1f - Mth.cos(bz)) + 12f * (1f - Mth.cos(bx));
+			root.z -= 12f * Mth.sin(bx);
+		}
+		// a mão faz força na borda no começo de levantar (e no fim de sentar), quando o ombro ainda está baixo;
+		// subindo da água as duas mãos já estão na borda (transicao cuida delas)
+		if (d.trans != MarcioCliente.SUBIR_AGUA || d.transFase == Trajeto.ACOMODA) apoio(d, root, esq, Mth.sin(Mth.PI * AnimPesca.clamp(pe * 1.5f)));
 	}
 
-	/** Mão esquerda apoiada na borda do barco (6 px acima do chão, 9 px para o lado), do lado de fora do joelho. */
-	private static void apoio(ModelPart esq, float w) {
-		if (w > 0) misturar(esq, -0.15f, 0.1f, -0.55f, w);
+	/**
+	 * Mão esquerda na borda do barco: aponta para a borda de verdade (posição e giro do barco neste quadro);
+	 * sem barco por perto, uma pose de apoio do lado do joelho.
+	 */
+	private static void apoio(DadosMarcio d, ModelPart root, ModelPart esq, float w) {
+		if (w <= 0) return;
+		if (d.bordaEsq == null || exportando) { misturar(esq, -0.15f, 0.1f, -0.55f, w); return; }
+		alcancar(d, root, esq, d.bordaEsq, w, 0.2f);
+	}
+
+	/**
+	 * Leva a mão esquerda até o ponto do mundo; se o braço não chega, o corpo se inclina para aquele lado
+	 * (em volta do quadril sentado, ou dos pés em pé) só o quanto falta, até 'max' radianos.
+	 */
+	private static void alcancar(DadosMarcio d, ModelPart root, ModelPart esq, net.minecraft.world.phys.Vec3 alvo, float w, float max) {
+		float falta = Ik.mirar(d, root, esq, alvo, Ik.BRACO, w);
+		if (falta <= 0.3f) return;
+		org.joml.Vector3f f = Ik.noRoot(root, Ik.modelo(d, alvo));
+		float len = Mth.sqrt(f.x * f.x + f.z * f.z);
+		if (len < 1e-3f) return;
+		float altura = d.sentado ? 12f : 24f, ang = Mth.clamp(falta / altura, 0f, max) * w;
+		Ik.girarNosPes(root, -ang * f.z / len, ang * f.x / len, altura); // inclina na direção do alvo
+		Ik.mirar(d, root, esq, alvo, Ik.BRACO, w);
 	}
 
 	/**
@@ -144,53 +178,53 @@ public final class PoseMarcio {
 	}
 
 	/**
-	 * Subir e descer do barco (o caminho do corpo está em MarcioCliente.caminho; aqui ficam as pernas e braços).
-	 * Da terra: anda até a borda, apoia a mão e passa uma perna e depois a outra, e senta. Da água: estica os
-	 * braços, se agarra na borda, se puxa para cima com a perna vindo por último, e senta. Descendo: levanta
-	 * apoiando a mão (levantar), passa as pernas por cima da borda e anda até a doca.
+	 * Subir e descer do barco, sentar e levantar (o caminho do corpo está no Trajeto; aqui ficam as pernas e os
+	 * braços de cada fase). Andando: passos de verdade, tantos quanto a distância. Passando pela borda: uma perna e
+	 * depois a outra por cima dela, com a mão na borda real. Da água: as duas mãos agarram a borda e o corpo se puxa.
 	 */
 	private static void transicao(DadosMarcio d, float age, ModelPart head, ModelPart body, ModelPart dir, ModelPart esq,
 	                              ModelPart pernaD, ModelPart pernaE, ModelPart root) {
-		float u = d.transU;
-		switch (d.trans) {
-			case MarcioCliente.SUBIR_TERRA -> {
-				andar(d, u, 0f, 0.45f, 0.55f, root, body, dir, esq, pernaD, pernaE);
-				passarPerna(u, 0.45f, 0.75f, head, body, esq, pernaD, pernaE, root);
-			}
-			case MarcioCliente.SUBIR_AGUA -> {
-				if (u < 0.35f) { // nada até a borda e estica os braços para agarrar
-					float v = u / 0.35f, w = AnimPesca.inOutSine(v);
-					misturar(dir, -2.6f, 0f, 0.25f, w);
-					misturar(esq, -2.6f, 0f, -0.25f, w);
+		if (d.trans == MarcioCliente.SEM) return;
+		float v = d.transV;
+		boolean agua = d.trans == MarcioCliente.SUBIR_AGUA;
+		switch (d.transFase) {
+			case Trajeto.ANDA -> {
+				if (agua) { // nadando até o barco: braçadas e pernas batendo
+					float b = age * 0.35f;
+					misturar(dir, -2.4f + 0.6f * Mth.sin(b), 0f, 0.3f, 0.8f);
+					misturar(esq, -2.4f + 0.6f * Mth.sin(b + Mth.PI), 0f, -0.3f, 0.8f);
 					pernaD.xRot += 0.35f * Mth.sin(age * 0.9f);
 					pernaE.xRot -= 0.35f * Mth.sin(age * 0.9f);
-					body.xRot += 0.3f * w;
-				} else if (u < 0.75f) { // se puxa: os braços empurram a borda para baixo e o corpo sobe
-					float v = (u - 0.35f) / 0.4f, e = AnimPesca.inOutSine(v);
-					misturar(dir, Mth.lerp(e, -2.6f, -0.5f), 0f, Mth.lerp(e, 0.25f, 0.4f), 1f - AnimPesca.inOutSine((v - 0.85f) / 0.15f));
-					misturar(esq, Mth.lerp(e, -2.6f, -0.5f), 0f, Mth.lerp(e, -0.25f, -0.4f), 1f);
-					body.xRot += 0.2f + 0.4f * Mth.sin(Mth.PI * v);
-					head.xRot += Mth.lerp(e, -0.25f, 0.2f); // olha para a borda e depois para onde vai sentar
-					// a perna direita vem por cima da borda no fim, a esquerda logo depois
-					pernaD.xRot -= 1.4f * Mth.sin(Mth.PI * AnimPesca.clamp((v - 0.3f) * 1.6f));
-					pernaE.xRot -= 1.2f * Mth.sin(Mth.PI * AnimPesca.clamp((v - 0.5f) * 2f));
-				}
+				} else andar(v, d.transPassos, root, body, dir, esq, pernaD, pernaE);
 			}
-			case MarcioCliente.DESCER -> {
-				passarPerna(u, 0.35f, 0.7f, head, body, esq, pernaD, pernaE, root);
-				andar(d, u, 0.7f, 1f, 0.25f, root, body, dir, esq, pernaD, pernaE);
+			case Trajeto.PASSA -> {
+				if (!agua) { passarPerna(d, v, head, body, esq, pernaD, pernaE, root); return; }
+				// da água: as duas mãos na borda (de verdade), o corpo se puxa e a perna vem por último
+				float e = AnimPesca.inOutSine(v);
+				if (d.bordaEsq != null) {
+					Ik.mirar(d, root, esq, d.bordaEsq, Ik.BRACO, 1f);
+					org.joml.Vector3f m = Ik.noRoot(root, Ik.modelo(d, d.bordaEsq));
+					Ik.mirar(dir, m.add(-6f, 0f, 0f), Ik.BRACO, 1f - AnimPesca.inOutSine((v - 0.8f) / 0.2f));
+				} else { misturar(dir, -2.6f, 0f, 0.25f, 1f); misturar(esq, -2.6f, 0f, -0.25f, 1f); }
+				body.xRot += 0.2f + 0.4f * Mth.sin(Mth.PI * v);
+				head.xRot += Mth.lerp(e, -0.25f, 0.2f);
+				pernaD.xRot -= 1.4f * Mth.sin(Mth.PI * AnimPesca.clamp((v - 0.3f) * 1.6f));
+				pernaE.xRot -= 1.2f * Mth.sin(Mth.PI * AnimPesca.clamp((v - 0.5f) * 2f));
 			}
-			case MarcioCliente.PULO -> andar(d, u, 0f, 1f, 1f, root, body, dir, esq, pernaD, pernaE);
+			case Trajeto.VIRA -> { // vira de costas para o assento em dois passinhos
+				float s2 = Mth.sin(v * 2 * Mth.PI);
+				pernaD.xRot += 0.3f * s2;
+				pernaE.xRot -= 0.3f * s2;
+			}
 			default -> {}
 		}
 	}
 
-	/** Passos entre 'a' e 'b' da transição, cobrindo 'parte' da distância (pernas e braço esquerdo balançando). */
-	private static void andar(DadosMarcio d, float u, float a, float b, float parte, ModelPart root, ModelPart body,
-	                          ModelPart dir, ModelPart esq, ModelPart pernaD, ModelPart pernaE) {
-		if (u < a || u > b) return;
-		float v = (u - a) / (b - a), w = AnimPesca.inOutSine(Math.min(1f, Math.min(v, 1f - v) * 5f));
-		float passo = v * Math.max(1f, Math.round(d.transDist * parte * 2.2f)); // ~2 passos por bloco, inteiro
+	/** Passos (fase andando da transição, 'v' de 0 a 1), com pernas, braço esquerdo e o corpo subindo e descendo. */
+	private static void andar(float v, float passos, ModelPart root, ModelPart body, ModelPart dir, ModelPart esq,
+	                          ModelPart pernaD, ModelPart pernaE) {
+		float w = AnimPesca.inOutSine(Math.min(1f, Math.min(v, 1f - v) * 5f));
+		float passo = v * passos;
 		float s = Mth.sin(passo * Mth.PI) * w;
 		pernaD.xRot += 0.6f * s;
 		pernaE.xRot -= 0.6f * s;
@@ -200,11 +234,10 @@ public final class PoseMarcio {
 		root.y -= 0.5f * Math.abs(Mth.sin(passo * Mth.PI)) * w; // sobe e desce a cada passo
 	}
 
-	/** Passa uma perna e depois a outra por cima da borda, com a mão esquerda apoiada nela. */
-	private static void passarPerna(float u, float a, float b, ModelPart head, ModelPart body, ModelPart esq,
+	/** Passa uma perna e depois a outra por cima da borda, com a mão esquerda apoiada nela (a borda de verdade). */
+	private static void passarPerna(DadosMarcio d, float v, ModelPart head, ModelPart body, ModelPart esq,
 	                                ModelPart pernaD, ModelPart pernaE, ModelPart root) {
-		if (u < a || u > b) return;
-		float v = (u - a) / (b - a), arco = Mth.sin(Mth.PI * v);
+		float arco = Mth.sin(Mth.PI * v);
 		float ld = Mth.sin(Mth.PI * AnimPesca.clamp(v * 1.6f)), le = Mth.sin(Mth.PI * AnimPesca.clamp((v - 0.38f) * 1.6f));
 		pernaD.xRot -= 1.3f * ld;
 		pernaD.zRot += 0.12f * ld; // joelho para fora para passar pela borda
@@ -213,7 +246,7 @@ public final class PoseMarcio {
 		root.zRot += 0.05f * (ld - le); // o peso fica no pé que está no chão
 		body.xRot += 0.3f * arco;
 		head.xRot += 0.25f * arco; // olha onde pisa
-		apoio(esq, arco);
+		apoio(d, root, esq, Math.min(1f, arco * 1.5f));
 	}
 
 	private static void especial(DadosMarcio d, ModelPart root, ModelPart head, ModelPart body, ModelPart dir, ModelPart esq,
@@ -256,38 +289,230 @@ public final class PoseMarcio {
 	}
 
 	/**
-	 * Carinho no Pinto (sentado no baú, atrás dele), de três jeitos. O corpo inteiro gira pouco, e as pernas
-	 * só acompanham em parte, para a cintura não "quebrar"; quem alcança o Pinto é o ombro e o braço.
+	 * Carinho no Pinto, de três jeitos. Com o Pinto à vista, a mão vai até a cabeça dele de verdade (onde ele
+	 * estiver neste quadro) e o corpo só gira o quanto precisa para alcançar, com as pernas acompanhando em parte
+	 * para a cintura não "quebrar". O afago sobe e desce em cima dele. Sem o Pinto, a pose fixa de antes.
 	 */
 	private static void carinho(DadosMarcio d, float t, float w, ModelPart root, ModelPart head, ModelPart body,
 	                            ModelPart esq, ModelPart pernaD, ModelPart pernaE) {
 		float afago = Mth.sin(t * 0.9f), afago2 = Mth.sin(t * 0.9f + 1f);
-		float giro, pernas;
+		float giroMax, pernas;
 		switch (d.animVar) {
-			case 1 -> { // de lado: o braço vai aberto para o lado e para trás, olhando para baixo
-				giro = -0.3f; pernas = 0.8f;
-				head.yRot = Mth.lerp(w, head.yRot, -1.1f);
-				head.xRot = Mth.lerp(w, head.xRot, 0.3f);
-				misturar(esq, 1.35f + 0.1f * afago, -0.3f, -0.55f + 0.12f * afago2, w);
+			case 1 -> { giroMax = 0.45f; pernas = 0.8f; head.xRot = Mth.lerp(w, head.xRot, 0.3f); } // de lado, olhando para baixo
+			case 2 -> { giroMax = 0.7f; pernas = 0.45f; body.xRot = Mth.lerp(w, body.xRot, 0.2f); } // meio de pé, inclinado
+			default -> { giroMax = 0.5f; pernas = 0.8f; body.xRot = Mth.lerp(w, body.xRot, -0.06f); } // por cima do ombro
+		}
+		if (d.pinto != null && !exportando) {
+			// o menor giro do corpo com que a mão alcança a cabeça dele
+			float base = root.yRot, giro = -giroMax;
+			for (float g = 0; g <= giroMax + 1e-3f; g += 0.05f) {
+				root.yRot = base - g * w;
+				org.joml.Vector3f alvo = Ik.noRoot(root, Ik.modelo(d, d.pinto));
+				float dx = alvo.x - esq.x, dy = alvo.y - esq.y, dz = alvo.z - esq.z;
+				if (Mth.sqrt(dx * dx + dy * dy + dz * dz) <= Ik.BRACO + 0.3f) { giro = -g; break; }
 			}
-			case 2 -> { // meio de pé (MarcioCliente levanta um pouco), vira mais e se inclina para o Pinto
-				giro = -0.55f; pernas = 0.45f;
-				head.yRot = Mth.lerp(w, head.yRot, -0.7f);
-				head.xRot = Mth.lerp(w, head.xRot, 0.35f);
-				body.xRot = Mth.lerp(w, body.xRot, 0.2f);
-				misturar(esq, 1.5f + 0.15f * afago, -0.3f, -0.45f + 0.08f * afago2, w);
-			}
-			default -> { // por cima do ombro, olhando para trás
-				giro = -0.35f; pernas = 0.8f;
-				head.yRot = Mth.lerp(w, head.yRot, -1.0f);
-				head.xRot = Mth.lerp(w, head.xRot, 0.1f);
-				body.xRot = Mth.lerp(w, body.xRot, -0.06f);
-				misturar(esq, 1.9f + 0.12f * afago, 0.3f, -0.15f + 0.08f * afago2, w);
-			}
+			root.yRot = base + giro * w;
+			pernaD.yRot -= giro * pernas * w;
+			pernaE.yRot -= giro * pernas * w;
+			// afago: a mão sobe e desce 1,5 px em cima da cabeça dele
+			alcancar(d, root, esq, d.pinto.add(0, 0.04 + 0.05 * afago, 0), w, 0.25f);
+			esq.zRot += 0.06f * afago2 * w;
+			Ik.olhar(d, root, head, d.pinto, w * 0.9f);
+			return;
+		}
+		float giro;
+		switch (d.animVar) {
+			case 1 -> { giro = -0.3f; head.yRot = Mth.lerp(w, head.yRot, -1.1f); misturar(esq, 1.35f + 0.1f * afago, -0.3f, -0.55f + 0.12f * afago2, w); }
+			case 2 -> { giro = -0.55f; head.yRot = Mth.lerp(w, head.yRot, -0.7f); head.xRot = Mth.lerp(w, head.xRot, 0.35f); misturar(esq, 1.5f + 0.15f * afago, -0.3f, -0.45f + 0.08f * afago2, w); }
+			default -> { giro = -0.35f; head.yRot = Mth.lerp(w, head.yRot, -1.0f); head.xRot = Mth.lerp(w, head.xRot, 0.1f); misturar(esq, 1.9f + 0.12f * afago, 0.3f, -0.15f + 0.08f * afago2, w); }
 		}
 		root.yRot += giro * w;
 		pernaD.yRot -= giro * pernas * w;
 		pernaE.yRot -= giro * pernas * w;
+	}
+
+	// ---------- sentar em qualquer lugar ----------
+
+	/**
+	 * Sentado num assento qualquer (degrau, cadeira, banco de mod, carrinho, chão) ou encostado na parede.
+	 * O quadril desce até a superfície do assento e as pernas vão até o chão: o ângulo sai da altura do assento
+	 * (cos = altura / comprimento da perna), então os pés ficam no chão em qualquer altura; se o assento for mais
+	 * alto que a perna, os pés ficam balançando. No chão, perna cruzada. Na parede, encostado de braços cruzados.
+	 */
+	private static void sentarAssento(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart body,
+	                                  ModelPart dir, ModelPart esq, ModelPart pernaD, ModelPart pernaE) {
+		float s = 1f - d.pe; // 1 sentado
+		if (d.assento == Lugares.ENCOSTO) {
+			float w = d.trans == MarcioCliente.SENTAR ? (d.transFase == Trajeto.ACOMODA ? AnimPesca.inOutSine(d.transV) : 0f)
+					: d.trans == MarcioCliente.LEVANTAR ? (d.transFase == Trajeto.LEVANTA ? 1f - AnimPesca.inOutSine(d.transV) : 0f) : 1f;
+			if (w <= 0) return;
+			Ik.girarNosPes(root, -0.13f * w, 0f, 24f); // costas na parede
+			pernaD.zRot -= 0.15f * w; // um pé cruzado na frente do outro
+			pernaD.xRot -= 0.08f * w;
+			pernaE.zRot += 0.03f * w;
+			Ik.mirar(dir, new org.joml.Vector3f(2.5f, 7.5f, -3.5f), Ik.BRACO, w); // braços cruzados
+			Ik.mirar(esq, new org.joml.Vector3f(-2.5f, 7f, -3.8f), Ik.BRACO, w);
+			head.zRot += 0.06f * w;
+			return;
+		}
+		if (d.assento == Lugares.DEITADO) {
+			// primeiro senta no chão com as pernas para a frente, depois deita para trás em volta do quadril
+			float senta = AnimPesca.inOutSine(Math.min(1f, s * 2f)), deita = AnimPesca.inOutSine(Math.max(0f, s * 2f - 1f));
+			root.y += 10.8f * senta;
+			pernaD.xRot = Mth.lerp(senta, pernaD.xRot, Mth.lerp(deita, -1.45f, -0.55f)); // joelho direito para cima
+			pernaE.xRot = Mth.lerp(senta, pernaE.xRot, Mth.lerp(deita, -1.45f, 0f));
+			pernaD.yRot = Mth.lerp(senta, pernaD.yRot, 0.1f);
+			pernaE.yRot = Mth.lerp(senta, pernaE.yRot, -0.05f);
+			Ik.girarNosPes(root, -Mth.HALF_PI * deita, 0f, 12f);
+			root.y -= 1.0f * deita; // costas rentes ao chão
+			// mãos atrás da cabeça
+			Ik.mirar(dir, new org.joml.Vector3f(-2.5f, -6f, 3f), Ik.BRACO, deita);
+			Ik.mirar(esq, new org.joml.Vector3f(2.5f, -6f, 3f), Ik.BRACO, deita);
+			body.xRot += 0.08f * (senta - deita);
+			return;
+		}
+		if (d.assento == Lugares.CHAO) {
+			root.y += 10.8f * s; // senta no chão
+			pernaD.xRot = Mth.lerp(s, pernaD.xRot, -1.45f);
+			pernaE.xRot = Mth.lerp(s, pernaE.xRot, -1.45f);
+			pernaD.yRot = Mth.lerp(s, pernaD.yRot, -0.7f); // cruzadas na frente
+			pernaE.yRot = Mth.lerp(s, pernaE.yRot, 0.7f);
+			body.xRot += 0.1f * s;
+			Ik.mirar(dir, new org.joml.Vector3f(-2.5f, 11f, -5f), Ik.BRACO, s); // mãos no colo
+			Ik.mirar(esq, new org.joml.Vector3f(2.5f, 11f, -5f), Ik.BRACO, s);
+			return;
+		}
+		// cadeira: o quadril (pivô das pernas, 12 px acima dos pés) desce até a superfície do assento
+		root.y += 12f * s;
+		float h = d.assentoAltura * 16f; // altura do assento até o chão (px)
+		float coxa = h >= Ik.PERNA ? 0.25f : (float) Math.acos(Mth.clamp(h / Ik.PERNA, 0f, 1f));
+		float balanca = h >= Ik.PERNA ? 0.18f * Mth.sin(age * 0.12f) : 0f; // pés no ar: balançando
+		pernaD.xRot = Mth.lerp(s, pernaD.xRot, -coxa + balanca);
+		pernaE.xRot = Mth.lerp(s, pernaE.xRot, -coxa - balanca);
+		pernaD.yRot = Mth.lerp(s, pernaD.yRot, 0.12f);
+		pernaE.yRot = Mth.lerp(s, pernaE.yRot, -0.12f);
+		body.xRot += 0.08f * s;
+		float impulso = Mth.sin(Mth.PI * d.pe);
+		body.xRot += 0.35f * impulso; // pega impulso para levantar e para sentar
+		head.xRot += 0.2f * impulso;
+		// mãos nos joelhos (a direita segura a vara, se tiver)
+		float jd = 9f;
+		Ik.mirar(dir, new org.joml.Vector3f(pernaD.x - 0.5f, pernaD.y + jd * Mth.cos(coxa), pernaD.z - jd * Mth.sin(coxa)), Ik.BRACO, s * 0.9f);
+		Ik.mirar(esq, new org.joml.Vector3f(pernaE.x + 0.5f, pernaE.y + jd * Mth.cos(coxa), pernaE.z - jd * Mth.sin(coxa)), Ik.BRACO, s * 0.9f);
+	}
+
+	/**
+	 * Pés no chão de verdade, parado em terra: num degrau ou na beira de um bloco, o quadril desce até o pé de
+	 * baixo alcançar o chão dele (até 4 px) e a outra perna dobra para a frente para o pé ficar no seu chão.
+	 */
+	private static void pesFirmes(DadosMarcio d, ModelPart root, ModelPart pernaD, ModelPart pernaE) {
+		if (Float.isNaN(d.chaoD) || Float.isNaN(d.chaoE)) return;
+		float w = Mth.clamp(1f - d.andar * 3f, 0f, 1f);
+		float hd = d.chaoD * 16f, he = d.chaoE * 16f;
+		if (w <= 0 || Math.abs(hd - he) < 0.5f) return;
+		float desce = Mth.clamp(-Math.min(hd, he), 0f, 4f);
+		root.y += desce * w;
+		for (int i = 0; i < 2; i++) {
+			ModelPart perna = i == 0 ? pernaD : pernaE;
+			float alt = (Ik.PERNA - desce) - (i == 0 ? hd : he); // do quadril até o chão desse pé
+			if (alt < Ik.PERNA) perna.xRot -= (float) Math.acos(Mth.clamp(alt / Ik.PERNA, 0f, 1f)) * w;
+		}
+	}
+
+	// ---------- reações ----------
+
+	/** Envelope de uma reação: sobe em 'entra' ticks, fica, e some entre 'sai' e 'fim'. */
+	private static float envelope(float t, float entra, float sai, float fim) {
+		if (t < 0 || t >= fim) return 0f;
+		return AnimPesca.inOutSine(Math.min(t / entra, t < sai ? 1f : (fim - t) / (fim - sai)));
+	}
+
+	/** Lendo: o livro na frente do peito com as duas mãos, a cabeça olhando para ele, virando a página às vezes. Tira do bolso e guarda. */
+	private static void livro(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq) {
+		org.joml.Vector3f bolso = new org.joml.Vector3f(-5.5f, 11.5f, 0.5f), livro = new org.joml.Vector3f(0f, 8.5f, -7.5f);
+		if (d.livroT < 20 && !d.livro) { // vai ao bolso buscar
+			Ik.mirar(dir, bolso, Ik.BRACO, envelope(d.livroT, 5, 12, 20));
+			return;
+		}
+		if (d.guardaT < 18) { // guardando: do peito para o bolso
+			float e = AnimPesca.inOutSine(d.guardaT / 10f);
+			Ik.mirar(dir, new org.joml.Vector3f(livro).lerp(bolso, e), Ik.BRACO, envelope(d.guardaT, 2, 10, 18));
+			return;
+		}
+		if (!d.livro) return;
+		float w = d.livroT < 20 ? AnimPesca.inOutSine((d.livroT - 8f) / 10f) : 1f; // do bolso até a frente do peito
+		Ik.mirar(dir, new org.joml.Vector3f(livro).add(-1f, 0.5f, 0f), Ik.BRACO, w);
+		float pagina = (age % 90f) < 12f ? Mth.sin(Mth.PI * (age % 90f) / 12f) : 0f; // vira a página
+		Ik.mirar(esq, new org.joml.Vector3f(livro).add(1.5f + 2.5f * pagina, -1.5f * pagina, -1f * pagina), Ik.BRACO, w);
+		Ik.olhar(head, new org.joml.Vector3f(livro), w * 0.85f);
+	}
+
+	/** "Toca aqui": levanta a mão aberta para quem ele cumprimentou; quando batem, a mão vai até a do jogador e volta. */
+	private static void hiFive(DadosMarcio d, ModelPart root, ModelPart head, ModelPart body, ModelPart esq) {
+		if (d.maoDe == null) return;
+		float wo = envelope(d.ofereceT, 6, 92, 100), wb = envelope(d.bateT, 2, 5, 16);
+		if (wo <= 0 && wb <= 0) return;
+		net.minecraft.world.phys.Vec3 olhos = new net.minecraft.world.phys.Vec3(d.mx, d.my + 1.62, d.mz);
+		net.minecraft.world.phys.Vec3 ate = d.maoDe.subtract(olhos);
+		net.minecraft.world.phys.Vec3 lado = new net.minecraft.world.phys.Vec3(ate.x, 0, ate.z);
+		lado = lado.lengthSqr() < 1e-4 ? new net.minecraft.world.phys.Vec3(0, 0, 1) : lado.normalize();
+		net.minecraft.world.phys.Vec3 oferta = olhos.add(lado.scale(0.42)).add(0, 0.32, 0); // mão aberta acima da cabeça, na direção dele
+		net.minecraft.world.phys.Vec3 encontro = oferta.lerp(d.maoDe.add(0, 0.2, 0), 0.35); // vai ao encontro da mão do jogador
+		float e = d.bateT < 3 ? AnimPesca.inOutSine(d.bateT / 3f) : d.bateT < 16 ? 1f - AnimPesca.inOutSine((d.bateT - 3f) / 13f) : 0f;
+		net.minecraft.world.phys.Vec3 alvo = wb > 0 ? oferta.lerp(encontro, e) : oferta;
+		Ik.mirar(d, root, esq, alvo, Ik.BRACO, Math.max(wo, wb));
+		Ik.olhar(d, root, head, d.maoDe, Math.max(wo, wb) * 0.8f);
+		if (wb > 0) body.xRot -= 0.12f * e * wb; // o tranco da batida
+	}
+
+	/** Quase caindo da beirada: braços girando, corpo jogado para trás (em volta dos pés), olhando para o buraco. */
+	private static void beirada(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq) {
+		float w = d.beirada;
+		if (w <= 0) return;
+		float g = age * 0.9f;
+		misturar(dir, -1.6f + 1.3f * Mth.sin(g), 0f, 0.9f + 0.3f * Mth.cos(g), w);
+		misturar(esq, -1.6f + 1.3f * Mth.sin(g + Mth.PI), 0f, -0.9f - 0.3f * Mth.cos(g + Mth.PI), w);
+		Ik.girarNosPes(root, (-0.16f + 0.07f * Mth.sin(age * 0.7f)) * w, 0.04f * Mth.sin(age * 0.5f) * w, 24f);
+		head.xRot += 0.4f * w;
+	}
+
+	/**
+	 * Susto (raio, barulho): um pulinho, o corpo recua para longe de onde veio (girando em volta dos pés ou do
+	 * assento), as mãos protegem o rosto do lado de lá e a cabeça vira para a coisa; depois treme e volta aos poucos.
+	 * Soma com o que estiver acontecendo, até no meio de sentar ou levantar.
+	 */
+	private static void susto(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq) {
+		if (d.susto == null) return;
+		float w = envelope(d.sustoT, 3, 14, 50);
+		if (w <= 0) return;
+		org.joml.Vector3f f = Ik.noRoot(root, Ik.modelo(d, d.susto));
+		float len = Mth.sqrt(f.x * f.x + f.z * f.z);
+		float fx = len < 1e-3f ? 0 : f.x / len, fz = len < 1e-3f ? -1 : f.z / len;
+		float pulo = d.sustoT < 7 ? Mth.sin(Mth.PI * d.sustoT / 7f) : 0f;
+		root.y -= 1.6f * pulo;
+		float altura = d.sentado ? 12f : 24f;
+		Ik.girarNosPes(root, 0.2f * fz * w, -0.2f * fx * w, altura); // para longe da coisa
+		root.x += 0.2f * Mth.sin(age * 2.6f) * w * (d.sustoT > 10 ? 1f : 0f); // tremendo
+		org.joml.Vector3f rosto = new org.joml.Vector3f(fx * 3.5f, -4f, -3f + fz * 3.5f);
+		Ik.mirar(dir, new org.joml.Vector3f(rosto).add(-2.5f, 0f, 0f), Ik.BRACO, w * 0.9f);
+		Ik.mirar(esq, new org.joml.Vector3f(rosto).add(2.5f, 0f, 0f), Ik.BRACO, w * 0.9f);
+		Ik.olhar(head, f, w);
+	}
+
+	/** Pancada: recua para o lado contrário de onde veio, encolhe a cabeça e abre os braços, em meio segundo. */
+	private static void dor(DadosMarcio d, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq) {
+		float w = envelope(d.dorT, 2, 3, 10);
+		if (w <= 0) return;
+		float fx = 0, fz = 1; // sem saber de onde veio, recua para trás
+		if (d.dorDe != null) {
+			org.joml.Vector3f f = Ik.noRoot(root, Ik.modelo(d, d.dorDe));
+			float len = Mth.sqrt(f.x * f.x + f.z * f.z);
+			if (len > 1e-3f) { fx = f.x / len; fz = f.z / len; }
+		}
+		Ik.girarNosPes(root, 0.24f * fz * w, -0.24f * fx * w, d.sentado ? 12f : 24f);
+		head.xRot += 0.25f * w;
+		dir.zRot += 0.3f * w;
+		esq.zRot -= 0.3f * w;
 	}
 
 	/**

@@ -61,6 +61,11 @@ public class BauChefe implements ModInitializer {
 	public static final EntityType<Boia> BOIA = Registry.register(BuiltInRegistries.ENTITY_TYPE, BOIA_KEY,
 			EntityType.Builder.<Boia>of(Boia::new, MobCategory.MISC).noLootTable().noSave().noSummon()
 					.sized(0.25f, 0.25f).clientTrackingRange(6).updateInterval(20).build(BOIA_KEY));
+	private static final ResourceKey<EntityType<?>> ASSENTO_KEY = ResourceKey.create(Registries.ENTITY_TYPE, id("assento"));
+	public static final EntityType<Assento> ASSENTO = Registry.register(BuiltInRegistries.ENTITY_TYPE, ASSENTO_KEY,
+			// sem noSave: o jogo não deixa montar num tipo que "não salva" (o próprio Assento não se salva, shouldBeSaved)
+			EntityType.Builder.<Assento>of(Assento::new, MobCategory.MISC).noLootTable().noSummon()
+					.sized(0.2f, 0.2f).clientTrackingRange(8).updateInterval(20).build(ASSENTO_KEY));
 	public static final BlockEntityType<BauChefeBlockEntity> BAU_CHEFE_BE = Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
 			id("bau_chefe"), FabricBlockEntityTypeBuilder.create(BauChefeBlockEntity::new, BAU_CHEFE).build());
 
@@ -82,6 +87,14 @@ public class BauChefe implements ModInitializer {
 		PayloadTypeRegistry.clientboundPlay().registerLarge(Pacotes.Estoque.TYPE, Pacotes.Estoque.CODEC, 8 << 20);
 		PayloadTypeRegistry.clientboundPlay().register(Pacotes.Fala.TYPE, Pacotes.Fala.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(Pacotes.Anim.TYPE, Pacotes.Anim.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(Pacotes.Reacao.TYPE, Pacotes.Reacao.CODEC);
+		// hi five: bater no Márcio quando ele está oferecendo a mão é bater na mão dele (não machuca)
+		net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register((player, level, hand, entity, hit) ->
+				!level.isClientSide() && Pescador.hiFive(player, entity) ? InteractionResult.SUCCESS : InteractionResult.PASS);
+		// raio por perto: susto (e corre, se estiver em terra)
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents.ENTITY_LOAD.register((e, level) -> {
+			if (e instanceof net.minecraft.world.entity.LightningBolt) Pescador.raio(level, e.position());
+		});
 
 		// /bauchefe abrir: mesmo efeito do Shift+V (útil sem teclado ou em comandos)
 		CommandRegistrationCallback.EVENT.register((d, reg, env) -> d.register(Commands.literal("bauchefe")

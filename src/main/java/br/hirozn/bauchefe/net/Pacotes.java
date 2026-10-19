@@ -69,6 +69,19 @@ public final class Pacotes {
 		@Override public Type<Fala> type() { return TYPE; }
 	}
 
+	/**
+	 * Servidor -> PC: reação procedural do Márcio. 'alvo' é o id de uma entidade (o jogador do hi five) ou -1;
+	 * x, y, z é de onde veio a coisa (o raio do susto). Tipos em Reacao.SUSTO...
+	 */
+	public record Reacao(int villager, int tipo, int alvo, double x, double y, double z) implements CustomPacketPayload {
+		public static final int SUSTO = 1, OFERECE = 2, BATE = 3, LIVRO = 4, GUARDA = 5;
+		public static final Type<Reacao> TYPE = Pacotes.tipo("reacao");
+		public static final StreamCodec<ByteBuf, Reacao> CODEC = StreamCodec.composite(
+				ByteBufCodecs.VAR_INT, Reacao::villager, ByteBufCodecs.VAR_INT, Reacao::tipo, ByteBufCodecs.VAR_INT, Reacao::alvo,
+				ByteBufCodecs.DOUBLE, Reacao::x, ByteBufCodecs.DOUBLE, Reacao::y, ByteBufCodecs.DOUBLE, Reacao::z, Reacao::new);
+		@Override public Type<Reacao> type() { return TYPE; }
+	}
+
 	/** Servidor -> PC: o Márcio começou uma animação especial (AnimMarcio). */
 	public record Anim(int villager, int anim) implements CustomPacketPayload {
 		public static final Type<Anim> TYPE = tipo("anim");
