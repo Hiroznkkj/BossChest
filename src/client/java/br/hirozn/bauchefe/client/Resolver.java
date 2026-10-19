@@ -21,6 +21,7 @@ import java.util.Map;
  * no mundo a superfície de cada um, com um raio a partir do próprio corpo. Aí ele mexe o mínimo possível na pose
  * (raiz, inclinação, cabeça, braços e pernas) para:
  * - nenhuma parte entrar em bloco (a caixa de cada parte contra as caixas de colisão dos blocos);
+ * - o braço não entrar na própria cabeça (acenar, coçar a cabeça): ele abre o ombro em vez de atravessar;
  * - cada apoio encostar na sua superfície (sem flutuar, sem afundar);
  * - não fugir da pose pedida nem dar salto de um quadro para o outro.
  * É um mínimos quadrados (Levenberg-Marquardt) com derivadas numéricas: cada coisa acima vira um "erro" em
@@ -71,6 +72,9 @@ public final class Resolver {
 	private static final float ENTRAR = 16f; // peso de cada pixel dentro de um bloco
 	private static final float APOIAR = 3f; // peso de cada pixel longe do apoio
 	private static final float ENCOLHE = 0.5f; // encostar não é atravessar (pixels de folga em cada parte)
+	private static final float CORPO = 12f; // peso de cada pixel de braço dentro da cabeça
+	private static final float FOLGA_CORPO = 1.5f; // a mão encosta na camada 3D de fora (cabelo 0,8 px + manga 0,6 px) sem afundar
+	private static final int[] BRACOS = {Esqueleto.BRACO_D, Esqueleto.BRACO_E};
 
 	private static float get(Esqueleto e, int i) {
 		ModelPart p = parte(e, i);
@@ -170,7 +174,7 @@ public final class Resolver {
 		Cena cena = new Cena(e, d, mundo);
 		double[] r = residuos(e, d, base, delta, prev, cena, alvos);
 		double antes = dentro(e, d, mundo);
-		boolean nada = antes == 0 && alvos.stream().allMatch(al -> Math.abs(erroApoio(e, d, al)) < 0.25);
+		boolean nada = antes == 0 && (d.assento == Lugares.DEITADO || autoDentro(e) == 0) && alvos.stream().allMatch(al -> Math.abs(erroApoio(e, d, al)) < 0.25);
 		float maxAnt = 0;
 		for (float v : prev) maxAnt = Math.max(maxAnt, Math.abs(v));
 		if (nada && maxAnt < 1e-3f) { anterior.remove(d.id); retrato(e, d, mundo, alvos, 0, 0); return 0; } // a pose já está boa
@@ -278,7 +282,7 @@ public final class Resolver {
 	/** Os erros (em pixels) da pose base + delta: fugir da pose, pular do quadro anterior, entrar em bloco, apoio longe. */
 	private static double[] residuos(Esqueleto e, DadosMarcio d, float[] base, float[] delta, float[] prev, Cena c, List<Alvo> alvos) {
 		aplicar(e, base, delta);
-		double[] r = new double[2 * N + c.total + alvos.size()];
+		double[] r = new double[2 * N + c.total + autoTotal(e) + alvos.size()];
 		int k = 0;
 		for (int i = 0; i < N; i++) r[k++] = FUGIR[i] * delta[i];
 		for (int i = 0; i < N; i++) r[k++] = PULAR[i] * (delta[i] - prev[i]);
@@ -301,9 +305,60 @@ public final class Resolver {
 				r[k++] = ENTRAR * arestaDentro(v, w, cubo);
 			}
 		}
+		// braço dentro da própria cabeça (deitado não confere: braços ao lado e a cabeça virando no travesseiro)
+		Matrix4f cab = e.matriz(Esqueleto.CABECA).invert();
+		for (int o : d.assento == Lugares.DEITADO ? new int[0] : BRACOS) {
+			Matrix4f m = new Matrix4f(cab).mul(e.matriz(o));
+			for (float[] p : pontosBraco(e, o)) {
+				m.transformPosition(p[0], p[1], p[2], v);
+				r[k++] = CORPO * naCabeca(e, v);
+			}
+		}
+		if (d.assento == Lugares.DEITADO) k += autoTotal(e);
 		for (Alvo a : alvos) r[k++] = APOIAR * a.w() * erroApoio(e, d, a);
 		aplicar(e, base, new float[N]);
 		return r;
+	}
+
+	/**
+	 * Os pontos da metade de baixo do braço (antebraço e mão). O topo do ombro pode raspar na cabeça quando ela
+	 * vira (é assim no modelo do Minecraft); o que não pode é a mão atravessar a cabeça.
+	 */
+	private static float[][] pontosBraco(Esqueleto e, int o) {
+		float[] q = e.cubo[o];
+		float meio = (q[1] + q[4]) / 2;
+		return java.util.Arrays.stream(pontos(e, o)).filter(p -> p[1] >= meio).toArray(float[][]::new);
+	}
+
+	/** Quantos pontos de braço são conferidos contra a cabeça. */
+	private static int autoTotal(Esqueleto e) {
+		int n = 0;
+		for (int o : BRACOS) n += pontosBraco(e, o).length;
+		return n;
+	}
+
+	/** Quão fundo (px) um ponto (no espaço da cabeça) está dentro da cabeça, com a folga. 0 = fora. */
+	private static float naCabeca(Esqueleto e, Vector3f p) {
+		float[] q = e.cubo[Esqueleto.CABECA];
+		float f = Float.MAX_VALUE;
+		for (int k = 0; k < 3; k++) {
+			float mn = q[k] - FOLGA_CORPO, mx = q[k + 3] + FOLGA_CORPO, x = p.get(k);
+			if (x <= mn || x >= mx) return 0;
+			f = Math.min(f, Math.min(x - mn, mx - x));
+		}
+		return f;
+	}
+
+	/** Soma de quanto os braços entram na cabeça (px), na pose atual das partes. */
+	static double autoDentro(Esqueleto e) {
+		Matrix4f cab = e.matriz(Esqueleto.CABECA).invert();
+		Vector3f v = new Vector3f();
+		double s = 0;
+		for (int o : BRACOS) {
+			Matrix4f m = new Matrix4f(cab).mul(e.matriz(o));
+			for (float[] p : pontosBraco(e, o)) { m.transformPosition(p[0], p[1], p[2], v); s += naCabeca(e, v); }
+		}
+		return s;
 	}
 
 	/** Quão fundo (px) a aresta a-b entra no cubo (encolhido): o meio do trecho dela que fica dentro. */
