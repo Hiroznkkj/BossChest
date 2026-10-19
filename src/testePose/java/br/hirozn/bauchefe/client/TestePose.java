@@ -39,6 +39,8 @@ public final class TestePose {
 		assentos();
 		penetracao();
 		teleporte();
+		resolvedor();
+		importar();
 		System.out.printf("%n%d verificações, %d falhas%n", casos, falhas.size());
 		for (String f : falhas) System.out.println("  FALHOU: " + f);
 		if (!falhas.isEmpty()) System.exit(1);
@@ -50,7 +52,7 @@ public final class TestePose {
 		if (!cond) falhas.add(String.format("%s: %.2f (limite %.2f)", o_que, valor, limite));
 	}
 
-	static void reset() { for (ModelPart p : root.getAllParts()) p.resetPose(); Ik.solido = null; }
+	static void reset() { for (ModelPart p : root.getAllParts()) p.resetPose(); Colisao.mundo = null; Resolver.esquecer(0); }
 
 	static DadosMarcio base() { DadosMarcio d = new DadosMarcio(); d.mx = 0; d.my = 0; d.mz = 0; d.myaw = 0; return d; }
 
@@ -122,9 +124,9 @@ public final class TestePose {
 		}
 	}
 
-	/** Braços e pernas não ficam dentro de blocos (Corpo.livrar), sentado numa laje com mundos diferentes em volta. */
+	/** Nenhuma parte dentro de blocos depois do Resolver, sentado numa laje com mundos diferentes em volta. */
 	static void penetracao() {
-		System.out.println("Membros dentro de blocos depois do livrar (pontos)");
+		System.out.println("Corpo dentro de blocos depois do resolvedor (px)");
 		String[] nomes = {"doca continua na frente", "beirada, chão 1 abaixo", "beirada, chão 1,5 abaixo", "bloco cheio na frente dos pés"};
 		List<List<AABB>> mundos = List.of(
 				List.of(new AABB(0, 0, 0, 1, 0.5, 1), new AABB(0, 0, 1, 1, 0.5, 2), new AABB(-5, -1, -5, 5, 0, 5)),
@@ -133,23 +135,14 @@ public final class TestePose {
 				List.of(new AABB(0, 0, 0, 1, 0.5, 1), new AABB(0, -1, 1, 1, 0, 2), new AABB(-5, -1, -5, 5, -1, 5)));
 		float[] alturas = {0f, 1.0f, 1.5f, 0.5f};
 		for (int i = 0; i < mundos.size(); i++) {
-			List<AABB> m = mundos.get(i);
 			reset();
 			DadosMarcio d = base(); d.mx = 0.5; d.my = 0.5; d.mz = 0.5; d.sentado = true; d.pe = 0f;
-			d.assento = Lugares.CADEIRA; d.assentoAltura = alturas[i];
+			d.assento = Lugares.CADEIRA; d.assentoAltura = alturas[i]; d.assentoBorda = 0.5f;
 			aplicar(d, 0);
-			Ik.Solido s = (x, y, z) -> { for (AABB b : m) if (b.contains(x, y, z) && y < b.maxY - 0.01 && y > b.minY + 0.01) return true; return false; };
-			Ik.solido = s;
-			Corpo c = corpo(d);
-			c.livrar();
-			int dentro = 0;
-			for (ModelPart membro : new ModelPart[]{pd, pe, dir, esq}) for (float y : new float[]{3, 7, 10}) {
-				Vec3 w = c.noMundo(membro, membro == dir ? -1 : membro == esq ? 1 : 0, y, 0);
-				if (s.em(w.x, w.y, w.z)) dentro++;
-			}
-			ok(dentro == 0, nomes[i], dentro, 0);
+			double antes = dentro(d, mundos.get(i));
+			resolver(d, mundos.get(i), 12, 0);
+			ok(dentro(d, mundos.get(i)) < 0.3, nomes[i] + String.format(" (antes %.1f)", antes), dentro(d, mundos.get(i)), 0.3);
 		}
-		Ik.solido = null;
 	}
 
 	/** Cabeça no mundo, refazendo o renderer (giro do corpo, deitar para nadar, modelo). */
@@ -209,5 +202,135 @@ public final class TestePose {
 			}
 			ok(max < 0.35, String.format("sentar num assento %.1f acima", alto), max, 0.35);
 		}
+	}
+
+	static Esqueleto esq() { return new Esqueleto(root, head, body, dir, esq, pd, pe); }
+
+	/** Quanto o corpo todo está dentro dos blocos (px), com a mesma folga do resolvedor. */
+	static double dentro(DadosMarcio d, List<AABB> m) {
+		Esqueleto e = esq();
+		double s = 0;
+		for (int o = 0; o < Esqueleto.OSSOS; o++) s += Colisao.entra(e.caixa(d, o, 0.5f), m) * 16;
+		return s;
+	}
+
+	/** Roda o resolvedor 'quadros' vezes (como no jogo, um por quadro), com o mundo 'm'. */
+	static void resolver(DadosMarcio d, List<AABB> m, int quadros, float t) {
+		Colisao.mundo = Colisao.de(m);
+		float[] guarda = new float[0];
+		for (int i = 0; i < quadros; i++) {
+			for (ModelPart p : root.getAllParts()) p.resetPose();
+			d.agora = t + i;
+			aplicar(d, t);
+			Resolver.resolver(esq(), d);
+		}
+	}
+
+	/** O resolvedor de contatos: costas na parede, cabeça deitada virando, sentado sem atravessar, em pé no degrau. */
+	static void resolvedor() {
+		System.out.println("Resolvedor: apoios e colisão por parte do corpo (px)");
+		List<AABB> chao = List.of(new AABB(-5, -1, -5, 5, 0, 5));
+		// encostado: parede atrás (ele olha para +z, as costas ficam para -z), a 0,32 do meio dele, como o servidor faz
+		for (double parede : new double[]{-0.32, -0.40, -0.26}) {
+			reset();
+			List<AABB> m = List.of(chao.get(0), new AABB(-5, 0, -3, 5, 3, parede));
+			DadosMarcio d = base(); d.assento = Lugares.ENCOSTO; d.pe = 1f;
+			aplicar(d, 0);
+			double antes = Math.abs(esq().ponto(d, Esqueleto.TRONCO, 0, 6, 2).z - parede) * 16;
+			resolver(d, m, 12, 0);
+			Esqueleto e = esq();
+			double depois = Math.abs(e.ponto(d, Esqueleto.TRONCO, 0, 6, 2).z - parede) * 16;
+			double pes = Math.max(Math.abs(e.ponto(d, Esqueleto.PERNA_D, 0, 12, 0).y), Math.abs(e.ponto(d, Esqueleto.PERNA_E, 0, 12, 0).y)) * 16;
+			ok(depois < 0.8, String.format("encostado, parede a %.2f: costas até a parede (antes %.1f)", -parede, antes), depois, 0.8);
+			ok(pes < 1.0, String.format("encostado, parede a %.2f: pés no chão", -parede), pes, 1.0);
+			ok(dentro(d, m) < 0.3, String.format("encostado, parede a %.2f: dentro de blocos", -parede), dentro(d, m), 0.3);
+		}
+		// deitado no chão virando a cabeça para os lados: a cabeça não entra no chão
+		for (float vira : new float[]{0f, 0.8f, 1.3f}) {
+			reset();
+			DadosMarcio d = base(); d.assento = Lugares.DEITADO; d.pe = 0f; d.sentado = true;
+			aplicar(d, 0);
+			head.yRot += vira;
+			Esqueleto e = esq();
+			double antes = Colisao.entra(e.caixa(d, Esqueleto.CABECA, 0.5f), chao) * 16;
+			Colisao.mundo = Colisao.de(chao);
+			for (int i = 0; i < 30; i++) { // ~meio segundo de jogo
+				for (ModelPart p : root.getAllParts()) p.resetPose();
+				d.agora = i;
+				aplicar(d, 0);
+				head.yRot += vira;
+				Resolver.resolver(esq(), d);
+			}
+			double cab = Colisao.entra(esq().caixa(d, Esqueleto.CABECA, 0.5f), chao) * 16;
+			double costas = Math.abs(esq().ponto(d, Esqueleto.TRONCO, 0, 6, 2).y) * 16;
+			ok(cab < 0.3, String.format("deitado, cabeça virada %.1f rad: cabeça dentro do chão (antes %.1f)", vira, antes), cab, 0.3);
+			// com a cabeça bem virada a quina dela (é um cubo) precisa de espaço: as costas sobem um pouco
+			double lim = vira > 1f ? 1.7 : 1.0;
+			ok(costas < lim, String.format("deitado, cabeça virada %.1f rad: costas no chão", vira), costas, lim);
+		}
+		// sentado em lajes com o mundo em volta: nenhuma parte dentro de blocos
+		String[] nomes = {"laje com bloco cheio na frente dos pés", "laje com parede atrás", "laje entre duas paredes"};
+		List<List<AABB>> mundos = List.of(
+				List.of(new AABB(0, 0, 0, 1, 0.5, 1), new AABB(0, 0, 1, 1, 1, 2), new AABB(-5, -1, -5, 5, 0, 5)),
+				List.of(new AABB(0, 0, 0, 1, 0.5, 1), new AABB(0, 0, -1, 1, 2, 0), new AABB(-5, -1, -5, 5, 0, 5)),
+				List.of(new AABB(0, 0, 0, 1, 0.5, 1), new AABB(-1, 0, 0, 0, 2, 1), new AABB(1, 0, 0, 2, 2, 1), new AABB(-5, -1, -5, 5, 0, 5)));
+		for (int i = 0; i < mundos.size(); i++) {
+			reset();
+			DadosMarcio d = base(); d.mx = 0.5; d.my = 0.5; d.mz = 0.5; d.sentado = true; d.pe = 0f;
+			d.assento = Lugares.CADEIRA; d.assentoAltura = 0.5f; d.assentoBorda = 0.5f;
+			aplicar(d, 0);
+			double antes = dentro(d, mundos.get(i));
+			resolver(d, mundos.get(i), 12, 0);
+			ok(dentro(d, mundos.get(i)) < 0.3, nomes[i] + String.format(" (antes %.1f)", antes), dentro(d, mundos.get(i)), 0.3);
+		}
+		// em pé com o braço balançando perto de uma parede
+		reset();
+		List<AABB> m = List.of(chao.get(0), new AABB(0.2, 0, -2, 2, 3, 2));
+		DadosMarcio d = base();
+		aplicar(d, 0);
+		esq.zRot -= 0.5f; // braço esquerdo aberto para o lado da parede (+x)
+		double antes = dentro(d, m);
+		Colisao.mundo = Colisao.de(m);
+		for (int i = 0; i < 10; i++) {
+			for (ModelPart p : root.getAllParts()) p.resetPose();
+			d.agora = i;
+			aplicar(d, 0);
+			esq.zRot -= 0.5f;
+			Resolver.resolver(esq(), d);
+		}
+		ok(dentro(d, m) < 0.3, String.format("em pé, braço aberto contra a parede (antes %.1f)", antes), dentro(d, m), 0.3);
+		// tempo: um quadro do resolvedor não pode pesar no jogo
+		reset();
+		DadosMarcio t = base(); t.assento = Lugares.ENCOSTO; t.pe = 1f;
+		List<AABB> mt = List.of(chao.get(0), new AABB(-5, 0, -3, 5, 3, -0.32));
+		long ini = System.nanoTime();
+		resolver(t, mt, 200, 0);
+		double ms = (System.nanoTime() - ini) / 1e6 / 200;
+		ok(ms < 1.5, "tempo por quadro do resolvedor (ms)", ms, 1.5);
+		Colisao.mundo = null;
+	}
+
+	/** Importar animações: Emotecraft e o formato próprio viram a mesma animação do esqueleto. */
+	static void importar() {
+		System.out.println("Importar animações (graus)");
+		String emote = """
+				{"name":"aceno","emote":{"beginTick":0,"endTick":20,"stopTick":24,"isLoop":"false","degrees":true,"moves":[
+				 {"tick":10,"easing":"LINEAR","rightArm":{"pitch":-160,"roll":20}},
+				 {"tick":20,"easing":"EASEINOUTQUAD","rightArm":{"pitch":-160,"roll":40},"head":{"yaw":15}}]}}""";
+		AnimCustom.Anim a = Importar.emotecraft("aceno", com.google.gson.JsonParser.parseString(emote).getAsJsonObject());
+		float[] v = new float[3];
+		a.ossos().get("rightarm").rot().valor(5 / 20f, v);
+		ok(Math.abs(v[0] + 80) < 1, "Emotecraft: braço no meio do caminho (tique 5)", v[0], -80);
+		a.ossos().get("rightarm").rot().valor(15 / 20f, v);
+		ok(Math.abs(v[2] - 30) < 1, "Emotecraft: easing in-out no meio (tique 15)", v[2], 30);
+		a.ossos().get("rightarm").rot().valor(24 / 20f, v);
+		ok(Math.abs(v[0]) < 1, "Emotecraft: volta para a pose parada no stopTick", v[0], 0);
+		String proprio = """
+				{"nome":"teste","duracao":1,"suave":false,"apoios":{"pes":1},"quadros":[
+				 {"t":0,"bracoD":[0,0,0]},{"t":1,"bracoD":[-90,0,10],"raizPos":[0,-2,0]}]}""";
+		AnimCustom.Anim b = Importar.proprio("x", com.google.gson.JsonParser.parseString(proprio).getAsJsonObject());
+		b.ossos().get("rightarm").rot().valor(0.5f, v);
+		ok(Math.abs(v[0] + 45) < 0.5, "formato próprio: meio do caminho", v[0], -45);
+		ok(b.apoios() != null && b.apoios().get("pes") == 1f, "formato próprio: apoios lidos", b.apoios() == null ? 0 : b.apoios().size(), 1);
 	}
 }

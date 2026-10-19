@@ -141,6 +141,8 @@ public final class Pescador {
 					continue;
 				}
 				if (relogio % 100 == 0) { profissao(level, v); s.barril = barril(level, v); }
+				// montado num assento sem estar sentando (comando repetido, susto, fogo...): desce, senão trava sentado
+				if (v.getVehicle() != null && !(v.getVehicle() instanceof AbstractBoat) && s.modo != Modo.SENTADO) v.stopRiding();
 				vida(level, v, s);
 				if (s.remontarEm > 0) { if (relogio >= s.remontarEm) remontar(level, v, s); continue; } // teste fora do barco
 				if (s.demo != null) demo(level, v, s);
@@ -222,6 +224,7 @@ public final class Pescador {
 		boolean noite = noite(level);
 		for (Villager v : level.getEntities(EntityTypes.VILLAGER, Pescador::ehPescador)) {
 			if (estados.containsKey(v.getUUID())) continue;
+			if (v.getVehicle() instanceof Assento) v.stopRiding(); // sentado de antes do servidor reiniciar
 			if (v.getVehicle() instanceof AbstractBoat) {
 				Estado s = new Estado();
 				s.casa = v.blockPosition();
@@ -1119,6 +1122,9 @@ public final class Pescador {
 
 	/** Reage ao que tem em volta (a cada segundo): pegando fogo, fogo perto, armadura nova de alguém, chuva. */
 	private static void arredores(ServerLevel level, Villager v, Estado s) {
+		// pegando fogo ou fogo colado (fora a fogueira em que ele se esquenta): levanta antes de tudo
+		if ((s.modo == Modo.SENTADO || s.modo == Modo.INDO_SENTAR)
+				&& (v.isOnFire() || s.fogoAquecer == null && Arredores.calor(level, v, 1.2) != null)) levantar(v, s);
 		boolean aPe = v.getVehicle() == null && !v.isSleeping();
 		// pegando fogo: grita e corre para a água
 		if (v.isOnFire() && relogio >= s.fogoEm) {

@@ -1,7 +1,8 @@
 # Animações customizadas do Márcio
 
-Dá para trocar qualquer animação do Márcio, ou criar novas, no [Blockbench](https://www.blockbench.net), sem
-recompilar o mod. As animações do código continuam lá: uma customizada só toma o lugar da animação que tem o mesmo nome.
+Dá para trocar qualquer animação do Márcio, ou criar novas, sem recompilar o mod. Há três formatos, que viram a
+mesma coisa por dentro (ver [Formatos](#formatos)): o do [Blockbench](https://www.blockbench.net), os emotes do
+Emotecraft e um formato próprio, simples de escrever à mão. As animações do código continuam lá: uma customizada só toma o lugar da animação que tem o mesmo nome.
 Se você apagar o arquivo, a do código volta.
 
 ## Passo a passo
@@ -63,3 +64,62 @@ ela para no último quadro (ou repete, se tiver **Loop** ligado). Se for mais lo
 - Mexer no braço direito durante a pesca não muda de onde a boia sai: a linha continua saindo da ponta da vara do código.
 
 Se algum eixo aparecer espelhado no jogo em relação ao Blockbench, inverta o sinal desse eixo no quadro-chave.
+
+## Formatos
+
+Todos os formatos animam o mesmo **esqueleto padrão** (o humanoide do Minecraft: `head`, `body`, `rightArm`,
+`leftArm`, `rightLeg`, `leftLeg` e `root`). Qualquer NPC com corpo humanoide usa as mesmas animações, e o tamanho
+de cada parte vem do modelo dele. O mod reconhece o formato pelo conteúdo do `.json`.
+
+### Blockbench (`"animations"`)
+
+O passo a passo acima.
+
+### Emotecraft (`"emote"`)
+
+Os emotes `.json` do Emotecraft funcionam direto. O mod lê a pasta `emotes/` do jogo (a mesma do Emotecraft) e a
+`config/bauchefe/animacoes/`. O nome da animação é o nome do arquivo. Toque com `/marcioanim tocar <nome>`.
+- Lê `moves` com `head`, `torso`, `rightArm`, `leftArm`, `rightLeg`, `leftLeg` e `body` (o corpo inteiro), nos eixos
+  `x y z pitch yaw roll`, além de `degrees`, `isLoop`, `endTick`, `stopTick` e os easings (`EASEINOUTQUAD`, `LINEAR`, `CONSTANT`...).
+- Não lê `bend` (o esqueleto não tem cotovelo nem joelho) nem o formato binário `.emotecraft`.
+
+### Formato do Baú Chefe (`"quadros"`)
+
+Feito para escrever à mão (ou pedir para uma IA). Ângulos em graus, como no modelo: `x` negativo leva o braço para a frente e para cima.
+
+```json
+{
+  "nome": "aceno_grande",
+  "duracao": 1.6,
+  "loop": false,
+  "suave": true,
+  "apoios": {"pes": 1},
+  "quadros": [
+    {"t": 0,   "bracoD": [0, 0, 0]},
+    {"t": 0.4, "bracoD": [-160, 0, 20], "cabeca": [0, 15, 0]},
+    {"t": 0.8, "bracoD": [-160, 0, 45]},
+    {"t": 1.2, "bracoD": [-160, 0, 20], "raizPos": [0, -1, 0]},
+    {"t": 1.6, "bracoD": [0, 0, 0]}
+  ]
+}
+```
+
+- Ossos: `cabeca`, `tronco`, `bracoD`, `bracoE`, `pernaD`, `pernaE`, `raiz` (ou os nomes em inglês). Posição: o osso com
+  `Pos` no fim (`raizPos`), em pixels, com y para cima.
+- Cada osso usa só os quadros em que aparece. `suave: false` deixa a interpolação linear. `somar: true` soma na pose do código.
+
+### Apoios: a animação no mundo de verdade
+
+Toda animação passa pelo **resolvedor** (ver [PROCEDURAL.md](PROCEDURAL.md)): nenhuma parte entra em bloco. Ela pode
+também pedir **apoios**, e o resolvedor procura no mundo a superfície de cada um e encosta o corpo nela. Assim, uma
+animação de "deitar" deita no chão de verdade, e uma de "encostar" encosta na parede que estiver atrás:
+
+| Apoio | O que encosta | Onde procura |
+|---|---|---|
+| `pes` (ou `pe_d`, `pe_e`) | sola dos pés | embaixo |
+| `quadril` | embaixo do quadril (com a coxa por cima) | embaixo |
+| `costas` | meio das costas | atrás |
+| `nuca` | atrás da cabeça | atrás |
+| `mao_d`, `mao_e` | a mão | na direção do braço |
+
+O valor (0 a 1) é a força do apoio. Na Blockbench e no Emotecraft, coloque `"bauchefe_apoios": {"pes": 1}` dentro da animação.

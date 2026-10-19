@@ -55,6 +55,13 @@ public class BauChefeClient implements ClientModInitializer {
 						return 0;
 					}
 				}))
+				.then(ClientCommands.literal("colisao").executes(c -> {
+					Depurar.ligar(!Depurar.ligado());
+					c.getSource().sendFeedback(Component.literal(Depurar.ligado()
+							? "§6Colisões visíveis: §averde§7 = parte livre, §cvermelho§7 = entrando em bloco, §eamarelo§7 = apoio até a superfície achada, §7cinza = blocos em volta"
+							: "§6Colisões escondidas"));
+					return 1;
+				}))
 				.then(ClientCommands.literal("recarregar").executes(c -> { avisarAnims(c.getSource(), AnimCustom.recarregar()); return 1; }))
 				.then(ClientCommands.literal("lista").executes(c -> { avisarAnims(c.getSource(), AnimCustom.nomes().size()); return 1; }))
 				.then(ClientCommands.literal("tocar").then(ClientCommands.argument("nome", StringArgumentType.word())

@@ -218,7 +218,7 @@ public final class MarcioCliente {
 		d.nado = AnimPesca.inOutSine(n[0]);
 		d.agua = n[2];
 		alvos(v, st, t, partial, d);
-		Ik.solido = Ik.doMundo(v.level()); // para o Corpo.livrar não deixar braço e perna dentro dos blocos
+		Colisao.mundo = Colisao.doNivel(v.level()); // para o Resolver (colisão de cada parte do corpo)
 	}
 
 	/**
@@ -325,7 +325,26 @@ public final class MarcioCliente {
 			float chao = d.assento == Lugares.CHAO || d.assento == Lugares.ENCOSTO ? 0f
 					: chao(v.level(), new Vec3(a.x - Mth.sin(r) * 0.55, a.y, a.z + Mth.cos(r) * 0.55), a.y, 1.5);
 			d.assentoAltura = Float.isNaN(chao) ? 0.5f : -chao;
+			d.assentoBorda = borda(v.level(), a, r);
 		}
+	}
+
+	/**
+	 * Do ponto do assento até a beira da frente da superfície dele (blocos), pela colisão de verdade: numa laje
+	 * ou degrau é meio bloco, numa cadeira de mod pode ser menos. Até 0,5.
+	 */
+	static float borda(net.minecraft.world.level.Level level, Vec3 a, float yawRad) {
+		double fx = -Mth.sin(yawRad), fz = Mth.cos(yawRad);
+		net.minecraft.core.BlockPos bp = net.minecraft.core.BlockPos.containing(a.x, a.y - 0.01, a.z);
+		float melhor = 0.19f;
+		for (net.minecraft.world.phys.AABB b : level.getBlockState(bp).getCollisionShape(level, bp).toAabbs()) {
+			b = b.move(bp);
+			if (a.x < b.minX || a.x > b.maxX || a.z < b.minZ || a.z > b.maxZ || Math.abs(b.maxY - a.y) > 0.05) continue;
+			double tx = Math.abs(fx) < 1e-4 ? 9 : ((fx > 0 ? b.maxX : b.minX) - a.x) / fx;
+			double tz = Math.abs(fz) < 1e-4 ? 9 : ((fz > 0 ? b.maxZ : b.minZ) - a.z) / fz;
+			melhor = (float) Mth.clamp(Math.min(tx, tz), 0, 0.5);
+		}
+		return melhor;
 	}
 
 	/** Pulo comum (lugar antigo - novo): o desvio que falta em 'u' (0..1), num arco. */
