@@ -39,7 +39,7 @@ public final class AnimCustom {
 	public static final String PARADO = "parado";
 
 	/** Um canal de um osso (rotação, posição ou escala): quadros-chave no tempo (s), valor chegando e saindo de cada um. */
-	record Canal(float[] t, float[][] pre, float[][] pos, int[] modo) {
+	public record Canal(float[] t, float[][] pre, float[][] pos, int[] modo) {
 		static final int LINEAR = 0, SUAVE = 1, DEGRAU = 2;
 
 		void valor(float s, float[] out) {
@@ -62,10 +62,13 @@ public final class AnimCustom {
 		private static void copiar(float[] v, float[] out) { out[0] = v[0]; out[1] = v[1]; out[2] = v[2]; }
 	}
 
-	record Osso(Canal rot, Canal pos, Canal esc) {}
+	public record Osso(Canal rot, Canal pos, Canal esc) {}
 
-	/** duracao em segundos; loop = repete; somar = soma na pose atual em vez de trocar ("bauchefe_somar": true). */
-	public record Anim(String nome, float duracao, boolean loop, boolean somar, Map<String, Osso> ossos) {}
+	/**
+	 * duracao em segundos; loop = repete; somar = soma na pose atual em vez de trocar ("bauchefe_somar": true);
+	 * apoios = onde o corpo se apoia enquanto ela toca ("pes", "costas", "quadril"...; ver Resolver), ou null.
+	 */
+	public record Anim(String nome, float duracao, boolean loop, boolean somar, Map<String, Osso> ossos, Map<String, Float> apoios) {}
 
 	private static Map<String, Anim> anims = Map.of();
 	private static long assinatura = -1, checado;
@@ -97,12 +100,13 @@ public final class AnimCustom {
 				try (Reader r = e.getValue().openAsReader()) { ler(r, e.getKey().toString(), novo); }
 				catch (Exception ex) { erro(e.getKey().toString(), ex); }
 		} catch (Throwable ignorado) {} // sem resource manager ainda (ou fora do jogo)
-		if (pasta() != null && Files.isDirectory(pasta())) {
-			try (Stream<Path> l = Files.list(pasta())) {
+		// os emotes do Emotecraft (pasta emotes do jogo) e depois a nossa pasta, que passa por cima
+		for (Path pasta : pastas()) {
+			try (Stream<Path> l = Files.list(pasta)) {
 				for (Path p : l.filter(x -> x.toString().endsWith(".json")).sorted().toList())
 					try (Reader r = Files.newBufferedReader(p)) { ler(r, p.getFileName().toString(), novo); }
 					catch (Exception ex) { erro(p.getFileName().toString(), ex); }
-			} catch (Exception ex) { erro(pasta().toString(), ex); }
+			} catch (Exception ex) { erro(pasta.toString(), ex); }
 		}
 		anims = novo;
 		checado = System.currentTimeMillis();
@@ -115,14 +119,23 @@ public final class AnimCustom {
 		BauChefe.LOG.warn("[Baú Chefe] Animação do Márcio com erro em {}", arquivo, ex);
 	}
 
-	/** Muda quando algum .json da pasta muda (nome, tamanho ou data). */
+	/** As pastas de onde ler, que existem: emotes/ (do Emotecraft) e config/bauchefe/animacoes/. */
+	private static List<Path> pastas() {
+		List<Path> l = new ArrayList<>();
+		try { l.add(FabricLoader.getInstance().getGameDir().resolve("emotes")); } catch (Exception ignorado) {}
+		if (pasta() != null) l.add(pasta());
+		l.removeIf(p -> !Files.isDirectory(p));
+		return l;
+	}
+
+	/** Muda quando algum .json das pastas muda (nome, tamanho ou data). */
 	private static long assinar() {
-		if (pasta() == null || !Files.isDirectory(pasta())) return 0;
 		long h = 1;
-		try (Stream<Path> l = Files.list(pasta())) {
-			for (Path p : l.filter(x -> x.toString().endsWith(".json")).toList())
-				h += p.getFileName().toString().hashCode() * 31L + Files.size(p) * 17L + Files.getLastModifiedTime(p).toMillis();
-		} catch (Exception e) { return -2; }
+		for (Path pasta : pastas())
+			try (Stream<Path> l = Files.list(pasta)) {
+				for (Path p : l.filter(x -> x.toString().endsWith(".json")).toList())
+					h += p.getFileName().toString().hashCode() * 31L + Files.size(p) * 17L + Files.getLastModifiedTime(p).toMillis();
+			} catch (Exception e) { return -2; }
 		return h;
 	}
 
@@ -130,7 +143,10 @@ public final class AnimCustom {
 
 	private static void ler(Reader r, String arquivo, Map<String, Anim> out) {
 		JsonObject raiz = JsonParser.parseReader(r).getAsJsonObject();
-		if (!raiz.has("animations")) throw new IllegalArgumentException("sem \"animations\" (exporte pelo Blockbench: Animation > Export Animations)");
+		String nomeArq = arquivo.substring(Math.max(arquivo.lastIndexOf('/'), arquivo.lastIndexOf(':')) + 1).replace(".json", "").toLowerCase(Locale.ROOT);
+		if (raiz.has("emote")) { Anim a = Importar.emotecraft(nomeArq, raiz); out.put(a.nome(), a); return; }
+		if (raiz.has("quadros")) { Anim a = Importar.proprio(nomeArq, raiz); out.put(a.nome(), a); return; }
+		if (!raiz.has("animations")) throw new IllegalArgumentException("formato desconhecido: esperava \"animations\" (Blockbench), \"emote\" (Emotecraft) ou \"quadros\" (formato do Baú Chefe)");
 		for (var e : raiz.getAsJsonObject("animations").entrySet()) {
 			String chave = e.getKey();
 			String nome = chave.substring(chave.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT); // animation.marcio.acenar -> acenar
@@ -148,8 +164,16 @@ public final class AnimCustom {
 			JsonElement loop = a.get("loop");
 			boolean repete = loop != null && loop.isJsonPrimitive() && loop.getAsJsonPrimitive().isBoolean() && loop.getAsBoolean();
 			boolean somar = a.has("bauchefe_somar") && a.get("bauchefe_somar").getAsBoolean();
-			out.put(nome, new Anim(nome, Math.max(dur, 0.05f), repete, somar, ossos));
+			out.put(nome, new Anim(nome, Math.max(dur, 0.05f), repete, somar, ossos, apoios(a.get("bauchefe_apoios"))));
 		}
+	}
+
+	/** {"pes": 1, "costas": 0.8} -> mapa (null se não tem). */
+	static Map<String, Float> apoios(JsonElement j) {
+		if (j == null || !j.isJsonObject()) return null;
+		Map<String, Float> m = new HashMap<>();
+		for (var e : j.getAsJsonObject().entrySet()) m.put(e.getKey().toLowerCase(Locale.ROOT), e.getValue().getAsFloat());
+		return m;
 	}
 
 	private static Canal canal(JsonElement j, float padrao) {

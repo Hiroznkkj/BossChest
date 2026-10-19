@@ -42,6 +42,7 @@ public class DadosMarcio {
 	public boolean livro; // com o livro na mão
 	public net.minecraft.world.phys.Vec3 assentoPos; // superfície do assento (mundo) e para onde fica virado
 	public float assentoYaw;
+	public float assentoBorda = 0.19f; // do meio do assento até a beira da frente dele (blocos), medida no mundo
 	// camadas novas: chuva na cabeça, medindo o quarto, fogueira para esquentar as mãos, armadura nova de alguém
 	// (pés e cabeça dela), com quem conversa (olhos), calor de fogo perto, pegando fogo
 	public boolean chuva, medindo, emChamas;

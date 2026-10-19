@@ -14,8 +14,32 @@ bate o hi five). Este guia mostra como criar uma reação nova sem fazer conta d
 5. **Camadas procedurais** (`Camadas`): reações que somam por cima de tudo, na ordem da lista.
 6. **Jeito de falar** (`PoseMarcio.expressao`).
 7. **Suavização** (`MarcioModel.arrastar`): nada muda de uma vez.
-8. **Não atravessar o mundo** (`Corpo.livrar`): se algum braço ou perna ficou dentro de um bloco (colisão real),
-   ele é girado aos poucos até sair.
+8. **Resolvedor** (`Resolver`): acerta a pose no mundo de verdade (ver abaixo).
+
+## O resolvedor: o corpo como coisa sólida
+
+Cada parte do corpo (cabeça, tronco, braços, pernas) é uma caixa sólida do tamanho do cubo dela no modelo
+(`Esqueleto`), e o mundo são as caixas de colisão dos blocos (`Colisao`): a mesma colisão que segura o jogador,
+então laje, degrau, cerca, escada de mão e cadeira de mod entram sem lista. Depois que a animação e as camadas
+dizem o que o corpo quer fazer, o resolvedor mexe o mínimo possível em 19 coisas (posição e inclinação do corpo,
+cabeça, braços e pernas) para:
+
+- **nenhuma parte entrar em bloco**: pontos espalhados em cada parte, e as arestas dos blocos contra cada parte
+  (a quina de uma laje no meio da coxa);
+- **os apoios encostarem**: a pose pede apoios (pés, quadril, costas, nuca), e cada um procura sua superfície
+  com um raio a partir do próprio corpo. Encostado, as costas vão até a parede que está atrás, sem flutuar.
+  Deitado, as costas e a nuca ficam no chão, e virando a cabeça a quina dela não entra no bloco;
+- **não fugir da pose pedida** e **não pular** de um quadro para o outro.
+
+Cada item vira um erro em pixels, e o resolvedor procura a pose com a menor soma (mínimos quadrados, Levenberg-Marquardt).
+Os apoios de cada situação ficam numa tabela (`Resolver.pedidos`), não num `if` por ação. Uma animação pode pedir os
+seus no arquivo (ver ANIMACOES.md). Um apoio novo é uma linha: um ponto de um osso, a direção em que ele procura e o alcance.
+
+Para ver o que ele vê, digite **`/marcioanim colisao`**:
+- a caixa de cada parte aparece em verde, ou em vermelho se estiver entrando num bloco;
+- os blocos em volta aparecem em cinza;
+- cada apoio é uma linha amarela até a superfície que ele achou;
+- em cima da cabeça aparece quantos pixels estavam dentro de blocos antes e depois.
 
 ## A API: `Corpo`
 
@@ -34,13 +58,13 @@ esquerda do NPC = +x. `w` é sempre o peso (0 a 1): mistura com a pose que já e
 | `distancia(Vec3)` | distância no chão até o ponto (blocos) |
 | `noMundo(parte, x, y, z)` | onde está um ponto de uma parte do corpo, no mundo (ex.: a mão) |
 | `Corpo.envelope(t, entra, sai, fim)` | peso de uma reação no tempo: sobe em `entra` ticks, fica até `sai`, some até `fim` |
-| `livrar()` | tira braços e pernas de dentro dos blocos |
 
 Partes: `c.cabeca`, `c.tronco`, `c.bracoD`, `c.bracoE`, `c.pernaD`, `c.pernaE`, `c.root` (o corpo todo),
 e `c.d` com tudo o que o cliente sabe do NPC (`DadosMarcio`).
 
-Dentro de `Ik` estão as peças de baixo nível (`modelo`, `mundo`, `mirar`, `girarNosPes`, `solido`), caso
-precise. O comprimento do braço e da perna (`Ik.BRACO`, `Ik.PERNA`) é medido dos cubos do modelo.
+Dentro de `Ik` estão as peças de baixo nível (`modelo`, `mundo`, `mirar`, `girarNosPes`), caso precise. Em
+`Colisao` estão `entra` (quanto uma caixa girada entrou num bloco), `fundo` (quão fundo um ponto está) e `raio`
+(a primeira superfície numa direção), para usar em outras mecânicas. O comprimento do braço e da perna (`Ik.BRACO`, `Ik.PERNA`) é medido dos cubos do modelo.
 
 ## Criar uma reação nova (exemplo: espirrar quando chove)
 

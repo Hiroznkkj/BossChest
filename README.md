@@ -2,8 +2,8 @@
 Mod Fabric "Baú Chefe" (bauchefe) para Minecraft 26.3.
 
 - [FALAS.md](FALAS.md): as falas do Márcio pescador.
-- [ANIMACOES.md](ANIMACOES.md): como fazer e trocar as animações do Márcio no Blockbench (`/marcioanim`).
-- [PROCEDURAL.md](PROCEDURAL.md): como a pose é calculada pelo mundo (IK, camadas) e como criar uma reação nova; testes com `./gradlew testePose`.
+- [ANIMACOES.md](ANIMACOES.md): como fazer e trocar as animações do Márcio (Blockbench, emotes do Emotecraft ou o formato próprio; `/marcioanim`).
+- [PROCEDURAL.md](PROCEDURAL.md): como a pose é calculada pelo mundo (IK, camadas, o resolvedor de colisão e apoios, `/marcioanim colisao`) e como criar uma reação nova; testes com `./gradlew testePose`.
 
 ## Créditos
 
@@ -21,3 +21,4 @@ Mod Fabric "Baú Chefe" (bauchefe) para Minecraft 26.3.
   > The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
   >
   > THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+- **Emotes:** o mod lê os emotes `.json` do [Emotecraft](https://github.com/KosmX/emotes), de **KosmX**, para tocar no Márcio. Só o formato do arquivo é lido, com um leitor próprio; nenhum código do Emotecraft foi usado.

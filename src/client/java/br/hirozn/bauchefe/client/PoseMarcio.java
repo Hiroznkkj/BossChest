@@ -377,10 +377,11 @@ public final class PoseMarcio {
 			return;
 		}
 		// cadeira: o quadril (pivô das pernas, 12 px acima dos pés) desce até a superfície do assento, perto da
-		// beira da frente (as pernas descem por fora do assento; o Corpo.livrar acerta se ainda encostarem)
+		// beira da frente (as pernas descem por fora do assento; o Resolver acerta se ainda encostarem)
 		float h = d.assentoAltura * 16f; // altura do assento até o chão (px)
 		root.y += 12f * s;
-		root.z -= (h >= Ik.PERNA ? 6f : 3f) * s; // pés no ar: senta na beirada, com as pernas penduradas para fora
+		// o quadril vai até a beira da frente do assento (medida no mundo): a perna desce por fora dele
+		root.z -= Math.max(3f, d.assentoBorda * 16f) * s;
 		float coxa = h >= Ik.PERNA ? 0.25f : (float) Math.acos(Mth.clamp(h / Ik.PERNA, 0f, 1f));
 		float balanca = h >= Ik.PERNA ? 0.18f * Mth.sin(age * 0.12f) : 0f; // pés no ar: balançando
 		pernaD.xRot = Mth.lerp(s, pernaD.xRot, -coxa + balanca);

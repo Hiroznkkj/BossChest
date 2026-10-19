@@ -50,6 +50,7 @@ public class Assento extends Entity {
 		super.tick();
 		if (level().isClientSide()) return;
 		if (tickCount > 5 && getPassengers().isEmpty()) { discard(); return; }
+		if (tickCount > 3600) { ejectPassengers(); return; } // segurança: ninguém fica sentado 3 min sem levantar
 		for (Entity p : getPassengers()) if (p instanceof LivingEntity l) { l.setYBodyRot(getYRot()); l.yBodyRotO = getYRot(); }
 	}
 
@@ -82,12 +83,10 @@ public class Assento extends Entity {
 	@Override
 	public boolean isPickable() { return false; }
 
+	// é salvo junto com o mundo: quem está montado só é salvo dentro do veículo (senão o NPC sumiria)
 	@Override
-	public boolean shouldBeSaved() { return false; }
+	protected void readAdditionalSaveData(ValueInput in) { entityData.set(TIPO, in.getIntOr("tipo", Lugares.CADEIRA)); }
 
 	@Override
-	protected void readAdditionalSaveData(ValueInput in) {}
-
-	@Override
-	protected void addAdditionalSaveData(ValueOutput out) {}
+	protected void addAdditionalSaveData(ValueOutput out) { out.putInt("tipo", tipo()); }
 }
