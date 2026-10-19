@@ -50,7 +50,7 @@ public final class AnimExportar {
 			int fase = f;
 			defs.add(new Def(AnimPesca.NOMES[f], durFase[f], f == AnimPesca.BOIANDO, (d, t) -> {
 				d.fase = fase; d.tempo = t;
-				if (fase == AnimPesca.LUTA) d.pe = AnimPesca.inOutSine(t / 10f); // fica de pé para brigar com o peixe
+				d.pe = AnimPesca.peLuta(fase, t, false); // fica de pé para brigar com o peixe
 			}));
 		}
 

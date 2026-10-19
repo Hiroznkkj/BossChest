@@ -15,6 +15,8 @@ public final class AnimPesca {
 	public static final String[] NOMES = {null, "pesca_preparar", "pesca_lancar", "pesca_boiando", "pesca_mordida", "pesca_puxar", "pesca_luta"};
 	/** Peixe difícil: briga de 4,5 s entre a mordida e a puxada (ele fica de pé e o barco balança). */
 	public static final int DUR_LUTA = 90;
+	/** Na briga ele leva 16 ticks para ficar de pé (apoiando a mão na borda) antes de começar a puxar. */
+	public static final float LEVANTA = 16f;
 	/** Em VOO a boia sai da vara neste tick e chega na água no fim da fase. */
 	public static final int SOLTA = 3;
 	/** Em PUXANDO a boia volta até a vara nestes ticks. */
@@ -41,7 +43,7 @@ public final class AnimPesca {
 	public static float outCubic(float u) { u = clamp(u); float v = 1 - u; return 1 - v * v * v; }
 	public static float inQuad(float u) { u = clamp(u); return u * u; }
 	public static float outQuad(float u) { u = clamp(u); return 1 - (1 - u) * (1 - u); }
-	static float clamp(float u) { return u < 0 ? 0 : u > 1 ? 1 : u; }
+	public static float clamp(float u) { return u < 0 ? 0 : u > 1 ? 1 : u; }
 
 	// ---------- braços ----------
 
@@ -73,9 +75,14 @@ public final class AnimPesca {
 		return (1f - Mth.cos(COXA * (1f - clamp(pe)))) / (1f - Mth.cos(COXA));
 	}
 
-	/** Intensidade da briga: entra em 8 ticks e sai nos últimos 10 (a puxada começa da pose normal). */
+	/** Intensidade da briga: começa quando ele termina de levantar, entra em 10 ticks e sai nos últimos 10. */
 	public static float luta(float t) {
-		return inOutSine(Math.min(1f, Math.min(t / 8f, (DUR_LUTA - t) / 10f)));
+		return inOutSine(Math.min(1f, Math.min((t - LEVANTA * 0.6f) / 10f, (DUR_LUTA - t) / 10f)));
+	}
+
+	/** De pé (1) ou sentado (0) na pesca: levanta no começo da briga e senta durante a puxada que vem depois dela. */
+	public static float peLuta(int fase, float t, boolean lutou) {
+		return fase == LUTA ? inOutSine(t / LEVANTA) : fase == PUXANDO && lutou ? 1f - inOutSine(t / DUR_PUXANDO) : 0f;
 	}
 
 	// ---------- ponta da vara ----------
@@ -93,8 +100,7 @@ public final class AnimPesca {
 		double x = -mx, y = 1.501 - my, z = mz;
 		// sentado no barco ele desce ASSENTO; na briga com o peixe fica de pé de novo (mesma conta da PoseMarcio)
 		if (v.isPassenger()) {
-			float pe = fase == LUTA ? inOutSine(t / 10f) : fase == PUXANDO && lutou ? 1f - inOutSine(t / DUR_PUXANDO) : 0f;
-			y -= ASSENTO * alturaAssento(pe);
+			y -= ASSENTO * alturaAssento(peLuta(fase, t, lutou));
 		}
 		float yaw = (180f - Mth.rotLerp(partial, v.yBodyRotO, v.yBodyRot)) * Mth.DEG_TO_RAD;
 		double cy = Mth.cos(yaw), sy = Mth.sin(yaw);

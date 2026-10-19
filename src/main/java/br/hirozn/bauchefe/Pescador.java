@@ -158,11 +158,38 @@ public final class Pescador {
 		return e instanceof Chicken && e.hasCustomName() && e.getCustomName().getString().toLowerCase(Locale.ROOT).contains("pinto");
 	}
 
-	/** Barco com baú do pescador (ou só com o Pinto, enquanto ele dorme): aceita 2 e põe a galinha em cima do baú. */
+	/** Barco com baú do pescador (marcado, ou com ele ou o Pinto dentro): aceita 2 e põe a galinha em cima do baú. */
 	public static boolean barcoDoMarcio(AbstractBoat b) {
 		if (!(b instanceof AbstractChestBoat)) return false;
+		if (b.entityTags().contains(TAG_BARCO)) return true;
 		for (Entity p : b.getPassengers()) if (ehPescador(p) || ehPinto(p)) return true;
 		return false;
+	}
+
+	/**
+	 * Quem pode entrar no barco do Márcio: ele (um só), o Pinto (uma galinha só) e jogador ("roubando").
+	 * Enquanto ele dorme o barco fica com lugar vago e qualquer bicho que encostasse entrava.
+	 */
+	public static boolean podeEntrar(AbstractBoat b, Entity e) {
+		if (e instanceof Player) return true;
+		if (ehPescador(e)) return !b.hasPassenger(Pescador::ehPescador);
+		if (ehPinto(e)) return !b.hasPassenger(p -> p instanceof Chicken);
+		return false;
+	}
+
+	/** Tira do barco do Márcio quem não devia estar lá (outra galinha, bicho que entrou enquanto ele dormia). */
+	private static void limparBarco(AbstractBoat b) {
+		boolean pinto = false, marcio = false;
+		for (Entity p : List.copyOf(b.getPassengers())) {
+			boolean fica = p instanceof Player || (ehPescador(p) && !marcio) || (ehPinto(p) && !pinto);
+			if (ehPescador(p)) marcio = true;
+			if (ehPinto(p)) pinto = true;
+			if (!fica) p.stopRiding();
+		}
+	}
+
+	private static void guardarVara(Villager v) {
+		if (v.getMainHandItem().is(Items.FISHING_ROD)) v.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
 	}
 
 	static boolean noite(ServerLevel level) {
@@ -241,6 +268,7 @@ public final class Pescador {
 		RandomSource r = level.getRandom();
 		segurarVara(v);
 		if (relogio % 100 == 0) marcarBarco(barco, v);
+		if (relogio % 20 == 0) limparBarco(barco);
 		s.timer--;
 		// monstro por perto: larga tudo e foge com o barco para a doca
 		if (s.modo != Modo.FUGINDO && relogio % 10 == 0) {
@@ -666,9 +694,11 @@ public final class Pescador {
 
 	/** Devolve false quando desiste de voltar (o procurar tenta de novo depois). */
 	private static boolean emTerra(ServerLevel level, Villager v, Estado s) {
-		segurarVara(v);
+		if (s.modo == Modo.EM_TERRA) guardarVara(v); // dorme sem a vara; pega de novo de manhã
+		else segurarVara(v);
 		AbstractBoat barco = s.barco != null && level.getEntity(s.barco) instanceof AbstractBoat b ? b : null;
 		if (barco != null && !barco.hasPassenger(Pescador::ehPescador)) frear(barco, 0); // barco atracado
+		if (barco != null && relogio % 20 == 0) limparBarco(barco);
 		if (s.modo == Modo.EM_TERRA) {
 			if (!noite(level) && !v.isSleeping()) {
 				s.modo = Modo.VOLTANDO; s.voltando = 0;
@@ -690,14 +720,37 @@ public final class Pescador {
 		}
 		if (barco == null) return s.voltando <= 2400;
 		if (barco.isUnderWater()) { s.modo = Modo.BUSCANDO; s.voltando = 0; return true; } // afundou de noite: vai buscar com a corda
-		double d = v.distanceToSqr(barco);
-		// perto do barco embarca; se ficar enroscado por 2 min, embarca de qualquer jeito
-		if (d < 4.0 * 4.0 || (s.voltando > 2400 && d < 32 * 32)) { embarcar(level, v, barco, s); return true; } // da doca ele alcança o barco
+		// anda até a beira, do lado do barco, e sobe (o cliente anima o passo para dentro do barco)
+		if (alcanca(v, barco, s.voltando)) { embarcar(level, v, barco, s); return true; }
 		if (s.voltando % 10 == 1) {
-			BlockPos alvo = s.doca != null ? s.doca : barco.blockPosition();
-			v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(alvo, 0.6f, 0));
+			BlockPos beira = beira(level, barco);
+			if (beira == null) beira = s.doca != null ? s.doca : barco.blockPosition();
+			v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(beira, 0.6f, 0));
 		}
 		return true;
+	}
+
+	/**
+	 * Já dá para subir no barco? Da terra, a até 2,4 blocos; da água, a até 1,8. Se não conseguir chegar mais
+	 * perto, aceita 4 blocos depois de 20 s e, depois de 2 min enroscado, qualquer distância até 32.
+	 */
+	private static boolean alcanca(Villager v, AbstractBoat barco, int t) {
+		double h = Math.pow(barco.getX() - v.getX(), 2) + Math.pow(barco.getZ() - v.getZ(), 2), dy = Math.abs(barco.getY() - v.getY());
+		double perto = v.isInWater() ? 1.8 : 2.4;
+		return (h < perto * perto && dy < 1.6) || (t > 400 && v.distanceToSqr(barco) < 4 * 4) || (t > 2400 && v.distanceToSqr(barco) < 32 * 32);
+	}
+
+	/** Bloco em terra firme, colado no barco (até 2,2 blocos dele), de onde ele sobe: o mais perto. */
+	private static BlockPos beira(Level level, AbstractBoat barco) {
+		BlockPos b = barco.blockPosition(), melhor = null;
+		double best = 2.2 * 2.2;
+		for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) for (int dy = -1; dy <= 2; dy++) {
+			BlockPos q = b.offset(dx, dy, dz);
+			if (!livre(level, q) || !livre(level, q.above()) || level.getBlockState(q.below()).getCollisionShape(level, q.below()).isEmpty()) continue;
+			double d = Math.pow(q.getX() + 0.5 - barco.getX(), 2) + Math.pow(q.getZ() + 0.5 - barco.getZ(), 2);
+			if (d < best) { best = d; melhor = q; }
+		}
+		return melhor;
 	}
 
 	private static void embarcar(ServerLevel level, Villager v, AbstractBoat barco, Estado s) {
@@ -808,8 +861,10 @@ public final class Pescador {
 		v.getLookControl().setLookAt(barco, 30f, 30f);
 		if (!fundo) {
 			if (corda) barco.removeLeash();
-			if (v.distanceToSqr(barco) < 4.0 * 4.0) { embarcar(level, v, barco, s); return true; } // perto: sobe
-			irAte(v, barco.position(), s.voltando);
+			if (alcanca(v, barco, s.voltando)) { embarcar(level, v, barco, s); return true; } // encostou: sobe
+			// em terra, vai para a beira do lado do barco; se não tiver, entra na água e nada até ele
+			BlockPos beira = v.isInWater() ? null : beira(level, barco);
+			irAte(v, beira != null ? Vec3.atBottomCenterOf(beira) : barco.position(), s.voltando);
 			return s.voltando <= 3600; // desiste depois de 3 min
 		}
 		// afundado: o ponto da superfície mais perto do barco (direto em cima, ou do lado se tiver algo por cima)
@@ -969,7 +1024,7 @@ public final class Pescador {
 		if (!forcar && relogio < s.proximaFala) return false;
 		if (level.getNearestPlayer(v, 32) == null) return false;
 		Falas.Linha l = Falas.frase(tipo, level.getRandom(), nome);
-		Pacotes.Fala fala = new Pacotes.Fala(v.getId(), Falas.balao(l.texto()), l.som() == null ? "" : l.som());
+		Pacotes.Fala fala = new Pacotes.Fala(v.getId(), Falas.balao(l.texto()), l.som() == null ? "" : l.som(), Falas.humor(tipo));
 		for (ServerPlayer p : PlayerLookup.tracking(v)) ServerPlayNetworking.send(p, fala);
 		s.proximaFala = relogio + 800 + level.getRandom().nextInt(1000);
 		return true;

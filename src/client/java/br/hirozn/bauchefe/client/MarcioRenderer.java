@@ -47,14 +47,19 @@ public class MarcioRenderer extends HumanoidMobRenderer<Villager, MarcioRenderSt
 		return super.getRenderOffset(st).add(d.saltoX, d.saltoY, d.saltoZ);
 	}
 
-	/** Nadando: deita de barriga para baixo girando em volta da linha d'água (~1,1 bloco acima dos pés). */
+	/**
+	 * Nadando: deita de barriga para baixo girando em volta da linha d'água, para as costas ficarem rente à
+	 * superfície (antes girava 1,1 bloco acima dos pés e ele ficava nadando por cima da água).
+	 */
 	@Override
 	protected void setupRotations(MarcioRenderState st, PoseStack pose, float bodyRot, float scale) {
 		super.setupRotations(st, pose, bodyRot, scale);
-		float n = st.bauchefe$dados().nado;
+		DadosMarcio d = st.bauchefe$dados();
+		float n = d.nado;
 		if (n <= 0) return;
-		pose.translate(0f, 1.1f, 0f);
+		float linha = Mth.clamp(d.agua - 0.12f, 0.1f, 1.1f);
+		pose.translate(0f, linha, 0f);
 		pose.rotateDegrees(Axis.XP, Mth.lerp(n, 0f, -85f));
-		pose.translate(0f, -1.1f, 0f);
+		pose.translate(0f, -linha, 0f);
 	}
 }

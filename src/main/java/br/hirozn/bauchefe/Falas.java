@@ -120,7 +120,29 @@ public final class Falas {
 			new Linha("[panting] Segura essa corda, barquinho!", null),
 			new Linha("[sharp exhale] Vem cá, sobe, sobe!", null)};
 
+	/** Jeito de falar, para a pose acompanhar a frase. */
+	public static final class Humor {
+		public static final int NEUTRO = 0, ALEGRE = 1, TRISTE = 2, BRAVO = 3, MEDO = 4, SONO = 5, PIADA = 6, BEBADO = 7,
+				SONHO = 8, CARINHO = 9, ANIMADO = 10;
+		private Humor() {}
+	}
+
 	private Falas() {}
+
+	public static int humor(Tipo t) {
+		return switch (t) {
+			case PEIXE, ACORDOU, OI, CANCAO, DEVOLVEU -> Humor.ALEGRE;
+			case RARO -> Humor.ANIMADO;
+			case VAZIO, SEM_DOCA, BUSCA -> Humor.TRISTE;
+			case NOITE, BOCEJO -> Humor.SONO;
+			case ROUBO, CORDA -> Humor.BRAVO;
+			case MEDO -> Humor.MEDO;
+			case PIADA -> Humor.PIADA;
+			case BEBADO -> Humor.BEBADO;
+			case SONHO -> Humor.SONHO;
+			case PINTO, CARINHO -> Humor.CARINHO;
+		};
+	}
 
 	static Linha[] lista(Tipo tipo, String nome, RandomSource r) {
 		return switch (tipo) {
