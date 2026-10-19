@@ -56,7 +56,7 @@ public final class Pescador {
 	private static final int LONGE_DE_CASA = 48, BUSCA_MAX = 900;
 	private static final double VELOCIDADE = 0.07;
 
-	private enum Modo { NAVEGANDO, INDO_DOCA, PARADO_NOITE, EM_TERRA, VOLTANDO, PERSEGUINDO, FUGINDO, BUSCANDO, INDO_SENTAR, SENTADO }
+	private enum Modo { NAVEGANDO, INDO_DOCA, PARADO_NOITE, EM_TERRA, VOLTANDO, PERSEGUINDO, FUGINDO, BUSCANDO, INDO_SENTAR, SENTADO, MEDINDO, CONVERSANDO }
 	/** Até onde ele procura o barco quando fica sem ele. */
 	private static final int RAIO_BARCO = 25;
 
@@ -101,6 +101,15 @@ public final class Pescador {
 		int correrAte; // correndo de um raio: não mexe no caminho dele
 		int hiFiveEm, hiFiveAte, doeuEm; // oferecer a mão (depois do oi), até quando oferece, última reclamação de pancada
 		UUID hiFiveCom;
+		// arredores: fogueira onde esquenta as mãos; medindo o quarto (as duas pontas e qual); conversa
+		BlockPos fogoAquecer;
+		BlockPos[] medir;
+		int medirIdx;
+		UUID conversaCom;
+		int conversaAte, proximaVez;
+		boolean vezDele, conversaComecou;
+		final Map<UUID, String> armaduras = new HashMap<>(); // armadura de cada jogador da última vez que viu
+		int armaduraEm, calorEm, fogoEm, chuvaEm; // até quando não reage de novo
 		boolean bebado; // de vez em quando acorda bêbado: fala bobagem e rema torto o dia todo
 		// /bauchefe marcio testar: resultado forçado da pesca, mordida rápida, fora do barco até, fila do "tudo"
 		Boolean testeFisga, testeDificil;
@@ -136,6 +145,8 @@ public final class Pescador {
 				if (s.remontarEm > 0) { if (relogio >= s.remontarEm) remontar(level, v, s); continue; } // teste fora do barco
 				if (s.demo != null) demo(level, v, s);
 				if (s.modo == Modo.INDO_SENTAR || s.modo == Modo.SENTADO) { sentar(level, v, s); continue; }
+				if (s.modo == Modo.MEDINDO) { medir(level, v, s); continue; }
+				if (s.modo == Modo.CONVERSANDO) { conversar(level, v, s); continue; }
 				if (s.modo == Modo.PERSEGUINDO) { perseguir(level, v, s); continue; }
 				if (s.modo == Modo.BUSCANDO) { if (!buscar(level, v, s)) it.remove(); continue; }
 				if (s.modo == Modo.EM_TERRA || s.modo == Modo.VOLTANDO) { if (!emTerra(level, v, s)) it.remove(); continue; }
@@ -715,6 +726,13 @@ public final class Pescador {
 			if (noite(level) && !v.isSleeping() && hora < 13800 && relogio - s.sentouNoite > 6000 && relogio % 20 == 0) {
 				s.sentouNoite = relogio;
 				RandomSource r = level.getRandom();
+				// quarto pequeno: mede de parede a parede e reclama; fogueira: senta e esquenta as mãos; aldeão: conversa
+				if (r.nextFloat() < 0.5f && medirQuarto(level, v, s, null)) return true;
+				BlockPos fogo = Arredores.fogueira(level, v, 10);
+				Lugares.Lugar perto = fogo == null ? null : Arredores.pertoDoFogo(level, v, fogo);
+				if (perto != null) { irSentar(v, s, perto, false, 600 + r.nextInt(400), null); s.fogoAquecer = fogo; return true; }
+				Villager outro = aldeaoPerto(level, v, 10);
+				if (outro != null && r.nextFloat() < 0.5f) { comecarConversa(v, s, outro, 400 + r.nextInt(300)); return true; }
 				Player p = level.getNearestPlayer(v, 8);
 				Lugares.Lugar l = r.nextFloat() < 0.7f ? Lugares.assento(level, v, 10) : null;
 				if (l != null) irSentar(v, s, l, true, 500 + r.nextInt(400), null);
@@ -1004,6 +1022,7 @@ public final class Pescador {
 				s.sentadoAte = relogio + s.duracaoSentado;
 				s.livroEm = s.lendo ? relogio + 30 : 0;
 				s.proximoPapo = relogio + 60;
+				if (s.fogoAquecer != null) reagir(v, Pacotes.Reacao.AQUECER, -1, Vec3.atBottomCenterOf(s.fogoAquecer));
 				return;
 			}
 			if (s.voltando > 400) { pararDeSentar(v, s); return; } // não conseguiu chegar
@@ -1040,6 +1059,7 @@ public final class Pescador {
 	}
 
 	private static void pararDeSentar(Villager v, Estado s) {
+		if (s.fogoAquecer != null) { reagir(v, Pacotes.Reacao.PARA, Pacotes.Reacao.AQUECER, v.position()); s.fogoAquecer = null; }
 		s.modo = s.antes != null ? s.antes : Modo.EM_TERRA;
 		s.antes = null;
 		s.lugar = null;
@@ -1095,6 +1115,154 @@ public final class Pescador {
 		for (ServerPlayer p : PlayerLookup.tracking(v)) ServerPlayNetworking.send(p, r);
 	}
 
+	// ---------- arredores: fogo, armadura, chuva, quarto, conversa ----------
+
+	/** Reage ao que tem em volta (a cada segundo): pegando fogo, fogo perto, armadura nova de alguém, chuva. */
+	private static void arredores(ServerLevel level, Villager v, Estado s) {
+		boolean aPe = v.getVehicle() == null && !v.isSleeping();
+		// pegando fogo: grita e corre para a água
+		if (v.isOnFire() && relogio >= s.fogoEm) {
+			s.fogoEm = relogio + 60;
+			falar(level, v, s, Falas.Tipo.FOGO, null, true);
+			if (aPe) {
+				Vec3 agua = Arredores.agua(level, v, 10);
+				correrPara(v, s, agua != null ? agua : v.position().add(level.getRandom().nextDouble() * 8 - 4, 0, level.getRandom().nextDouble() * 8 - 4), 60);
+			}
+		}
+		// fogo perto (fora a fogueira em que ele mesmo está se esquentando): protege o rosto e se afasta
+		if (relogio >= s.calorEm && s.fogoAquecer == null && !v.isOnFire()) {
+			Vec3 fogo = Arredores.calor(level, v, 2.5);
+			if (fogo != null) {
+				s.calorEm = relogio + 120;
+				reagir(v, Pacotes.Reacao.CALOR, -1, fogo);
+				falar(level, v, s, Falas.Tipo.QUENTE, null, false);
+				if (aPe) { Vec3 sai = v.position().subtract(fogo).multiply(1, 0, 1); correrPara(v, s, v.position().add(sai.lengthSqr() < 1e-3 ? new Vec3(1, 0, 0) : sai.normalize().scale(3)), 40); }
+			}
+		}
+		// armadura nova (melhor que a de antes) de quem está perto: olha de cima a baixo e elogia
+		for (ServerPlayer p : level.players()) {
+			if (p.isSpectator() || p.distanceToSqr(v) > 8 * 8) continue;
+			String agora = Arredores.armadura(p), antes = s.armaduras.put(p.getUUID(), agora);
+			if (antes != null && !antes.equals(agora) && Arredores.valor(agora) > Arredores.valor(antes) && relogio >= s.armaduraEm) {
+				s.armaduraEm = relogio + 200;
+				reagir(v, Pacotes.Reacao.ARMADURA, p.getId(), p.position());
+				falar(level, v, s, Falas.Tipo.ARMADURA, p.getName().getString(), true);
+			}
+		}
+		// chuva em terra, sem teto: reclama de vez em quando (o cliente põe a mão na cabeça)
+		if (aPe && relogio >= s.chuvaEm && level.isRainingAt(v.blockPosition().above())) {
+			s.chuvaEm = relogio + 2400;
+			falar(level, v, s, Falas.Tipo.CHUVA, null, false);
+		}
+	}
+
+	private static void correrPara(Villager v, Estado s, Vec3 alvo, int ticks) {
+		v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(alvo, 0.9f, 0));
+		s.correrAte = relogio + ticks;
+	}
+
+	/**
+	 * Quarto pequeno (até 8 blocos de chão ligados à cama): vai até uma ponta, atravessa contando os passos até a
+	 * outra e reclama. 'cama' null usa a cama dele (memória HOME do aldeão). Devolve false se o quarto é grande.
+	 */
+	private static boolean medirQuarto(ServerLevel level, Villager v, Estado s, BlockPos cama) {
+		if (cama == null) cama = v.getBrain().getMemory(MemoryModuleType.HOME).filter(g -> g.dimension() == level.dimension()).map(g -> g.pos()).orElse(null);
+		if (cama == null) return false;
+		List<BlockPos> chao = Arredores.quarto(level, cama);
+		BlockPos[] pontas = chao.isEmpty() || chao.size() > 8 ? null : Arredores.pontas(chao);
+		if (pontas == null) return false;
+		if (s.modo != Modo.MEDINDO) s.antes = s.modo;
+		s.medir = pontas;
+		s.medirIdx = 0;
+		s.modo = Modo.MEDINDO;
+		s.voltando = 0;
+		return true;
+	}
+
+	private static void medir(ServerLevel level, Villager v, Estado s) {
+		s.voltando++;
+		Vec3 alvo = Vec3.atBottomCenterOf(s.medir[s.medirIdx]);
+		boolean chegou = Math.pow(alvo.x - v.getX(), 2) + Math.pow(alvo.z - v.getZ(), 2) < 0.45 * 0.45;
+		if (chegou && s.medirIdx == 0) { // numa ponta: agora atravessa devagar, contando (o cliente olha os pés e conta nos dedos)
+			s.medirIdx = 1;
+			reagir(v, Pacotes.Reacao.MEDIR, -1, alvo);
+		} else if (chegou || s.voltando > 500) {
+			reagir(v, Pacotes.Reacao.PARA, Pacotes.Reacao.MEDIR, alvo);
+			if (chegou) {
+				double d = Math.sqrt(s.medir[0].distSqr(s.medir[1]));
+				falar(level, v, s, Falas.Tipo.QUARTO, String.valueOf(Math.max(1, Math.round(d * 1.6))), true);
+			}
+			s.modo = s.antes != null ? s.antes : Modo.EM_TERRA;
+			s.antes = null;
+			return;
+		}
+		if (s.voltando % 5 == 1) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(alvo, s.medirIdx == 0 ? 0.55f : 0.32f, 0));
+	}
+
+	/** Aldeão acordado mais perto (até 'raio'), que não esteja dormindo nem trabalhando de barco. */
+	private static Villager aldeaoPerto(ServerLevel level, Villager v, int raio) {
+		Villager melhor = null;
+		double best = raio * raio;
+		for (Villager o : level.getEntities(EntityTypes.VILLAGER, v.getBoundingBox().inflate(raio), o -> o != v && !o.isSleeping() && !o.isPassenger())) {
+			double d = o.distanceToSqr(v);
+			if (d < best) { best = d; melhor = o; }
+		}
+		return melhor;
+	}
+
+	private static void comecarConversa(Villager v, Estado s, LivingEntity outro, int ticks) {
+		if (s.modo != Modo.CONVERSANDO) s.antes = s.modo;
+		s.modo = Modo.CONVERSANDO;
+		s.conversaCom = outro.getUUID();
+		s.conversaAte = relogio + ticks;
+		s.proximaVez = relogio + 30;
+		s.vezDele = true;
+		s.conversaComecou = false;
+		s.voltando = 0;
+	}
+
+	/**
+	 * Conversando: chega perto, fica de frente e os dois se olham; um fala de cada vez. Se o outro também for um
+	 * NPC nosso, ele fala as frases dele; um aldeão comum responde com os sons de aldeão.
+	 */
+	private static void conversar(ServerLevel level, Villager v, Estado s) {
+		Entity e = s.conversaCom == null ? null : level.getEntity(s.conversaCom);
+		boolean acabou = !(e instanceof LivingEntity outro) || !outro.isAlive() || relogio > s.conversaAte || outro.distanceToSqr(v) > 14 * 14
+				|| (outro instanceof Villager ov && ov.isSleeping()) || v.isPassenger();
+		if (acabou) {
+			if (s.conversaComecou) reagir(v, Pacotes.Reacao.PARA, Pacotes.Reacao.CONVERSA, v.position());
+			s.modo = s.antes != null ? s.antes : Modo.EM_TERRA;
+			s.antes = null;
+			s.conversaCom = null;
+			return;
+		}
+		LivingEntity outro = (LivingEntity) e;
+		s.voltando++;
+		if (outro.distanceToSqr(v) > 2.3 * 2.3) { // chega perto primeiro
+			if (s.voltando % 10 == 1) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(outro, 0.55f, 2));
+			return;
+		}
+		v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+		v.getNavigation().stop();
+		v.getLookControl().setLookAt(outro, 30f, 30f);
+		if (outro instanceof Villager ov) { // o outro para e olha para ele
+			ov.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+			ov.getNavigation().stop();
+			ov.getLookControl().setLookAt(v, 30f, 30f);
+		}
+		if (!s.conversaComecou) { reagir(v, Pacotes.Reacao.CONVERSA, outro.getId(), outro.getEyePosition()); s.conversaComecou = true; }
+		if (relogio < s.proximaVez) return;
+		RandomSource r = level.getRandom();
+		if (s.vezDele) falar(level, v, s, Falas.Tipo.CONVERSA, null, true);
+		else {
+			Estado o = estados.get(outro.getUUID());
+			if (o != null && outro instanceof Villager ov && ehPescador(ov)) falar(level, ov, o, Falas.Tipo.CONVERSA, null, true);
+			else level.playSound(null, outro.getX(), outro.getEyeY(), outro.getZ(), r.nextBoolean() ? SoundEvents.VILLAGER_YES : SoundEvents.VILLAGER_AMBIENT, SoundSource.NEUTRAL, 1f, 0.9f + r.nextFloat() * 0.2f);
+		}
+		s.vezDele = !s.vezDele;
+		s.proximaVez = relogio + 70 + r.nextInt(60);
+	}
+
 	// ---------- fuga ----------
 
 	/** Monstro mais perto do barco, a até 'raio' blocos, ou null. */
@@ -1138,6 +1306,7 @@ public final class Pescador {
 		if (v.hurtTime > 0 && relogio >= s.doeuEm) { s.doeuEm = relogio + 100; falar(level, v, s, Falas.Tipo.APANHOU, null, true); }
 		if (s.hiFiveEm > 0 && relogio >= s.hiFiveEm) oferecerMao(level, v, s);
 		if (relogio % 20 != 0) return;
+		arredores(level, v, s);
 		RandomSource r = level.getRandom();
 		for (ServerPlayer p : level.players()) {
 			if (p.isSpectator() || p.distanceToSqr(v) > 8 * 8) continue;
@@ -1302,9 +1471,9 @@ public final class Pescador {
 	/** Nomes aceitos pelo /bauchefe marcio testar. */
 	public static final List<String> TESTES = List.of("tudo", "espreguicar", "cocar", "acenar", "comemorar", "carinho",
 			"pesca", "peixedificil", "vazio", "nadar", "levantar", "fala", "susto", "raio", "hifive", "subir", "sentar", "livro",
-			"chao", "encostar", "deitar");
+			"chao", "encostar", "deitar", "fogueira", "medir", "conversa", "fogo");
 	/** Testes que levam ele para terra (descendo do barco, se estiver nele). */
-	private static final List<String> TESTES_TERRA = List.of("subir", "sentar", "livro", "chao", "encostar", "deitar");
+	private static final List<String> TESTES_TERRA = List.of("subir", "sentar", "livro", "chao", "encostar", "deitar", "fogueira", "medir", "conversa", "fogo");
 	private static final List<String> TESTES_TUDO = List.of("levantar", "espreguicar", "cocar", "acenar", "carinho",
 			"pesca", "peixedificil", "vazio", "comemorar", "fala", "nadar");
 
@@ -1441,12 +1610,37 @@ public final class Pescador {
 		s.modo = Modo.VOLTANDO; // ao terminar, volta para o barco
 		s.voltando = 0;
 		if (qual.equals("subir")) return "";
+		switch (qual) {
+			case "fogo" -> { v.igniteForSeconds(4f); return ""; }
+			case "medir" -> { // a cama mais perto (até 24 blocos)
+				BlockPos cama = null;
+				for (BlockPos q : BlockPos.betweenClosed(v.blockPosition().offset(-24, -3, -24), v.blockPosition().offset(24, 3, 24)))
+					if (level.getBlockState(q).is(BlockTags.BEDS) && (cama == null || q.distSqr(v.blockPosition()) < cama.distSqr(v.blockPosition()))) cama = q.immutable();
+				if (cama == null) return "§cnão achei cama a até 24 blocos";
+				return medirQuarto(level, v, s, cama) ? "§7(quarto pequeno: medindo)" : "§c(o quarto dessa cama é grande: " + Arredores.quarto(level, cama).size() + " blocos de chão)";
+			}
+			case "fogueira" -> {
+				BlockPos fogo = Arredores.fogueira(level, v, 16);
+				Lugares.Lugar l = fogo == null ? null : Arredores.pertoDoFogo(level, v, fogo);
+				if (l == null) return "§cnão achei fogueira acesa (com chão em volta) a até 16 blocos";
+				irSentar(v, s, l, false, 300, null);
+				s.fogoAquecer = fogo;
+				return "";
+			}
+			case "conversa" -> {
+				Villager outro = aldeaoPerto(level, v, 16);
+				if (outro == null) return "§cnão achei aldeão acordado a até 16 blocos";
+				comecarConversa(v, s, outro, 300);
+				return "";
+			}
+			default -> {}
+		}
 		Player p = level.getNearestPlayer(v, 12);
 		Lugares.Lugar l = switch (qual) {
 			case "chao" -> Lugares.chao(level, v, p != null ? p.position() : origem);
 			case "encostar" -> Lugares.encosto(level, v, 16);
 			case "deitar" -> Lugares.deitar(level, v, 6);
-			default -> Lugares.assento(level, v, 10);
+			default -> Lugares.assento(level, v, 16); // no teste procura mais longe (de noite, sozinho, são 10 blocos)
 		};
 		if (l == null) return "§cnão achei lugar para " + qual + " por perto";
 		irSentar(v, s, l, qual.equals("livro"), 300, qual.equals("chao") && p != null ? p.getUUID() : null);

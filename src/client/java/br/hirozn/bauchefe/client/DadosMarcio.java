@@ -40,6 +40,13 @@ public class DadosMarcio {
 	public int assento;
 	public float assentoAltura;
 	public boolean livro; // com o livro na mão
+	public net.minecraft.world.phys.Vec3 assentoPos; // superfície do assento (mundo) e para onde fica virado
+	public float assentoYaw;
+	// camadas novas: chuva na cabeça, medindo o quarto, fogueira para esquentar as mãos, armadura nova de alguém
+	// (pés e cabeça dela), com quem conversa (olhos), calor de fogo perto, pegando fogo
+	public boolean chuva, medindo, emChamas;
+	public net.minecraft.world.phys.Vec3 aquecer, armaduraPes, armaduraCabeca, conversaCom, calor;
+	public float armaduraT = 999f, calorT = 999f;
 	public float andar; // velocidade da animação de andar (0 parado)
 	public float livroT = 999f, guardaT = 999f; // ticks desde que foi tirar o livro do bolso / guardar
 	// /marcioanim tocar: animação customizada tocando só neste PC e há quantos ticks

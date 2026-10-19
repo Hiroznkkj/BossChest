@@ -51,7 +51,7 @@ public final class MarcioCliente {
 	private static final Int2ObjectMap<float[]> assento = new Int2ObjectOpenHashMap<>(); // {1 no barco, tempo da troca, última vez na água}
 	private static final Int2ObjectMap<MarcioSom[]> sons = new Int2ObjectOpenHashMap<>();
 	private record Reac(float t0, Vec3 onde, int alvo) {}
-	private static final Int2ObjectMap<Reac[]> reacoes = new Int2ObjectOpenHashMap<>();
+	private static final Int2ObjectMap<Reac[]> reacoes = new Int2ObjectOpenHashMap<>(); // por tipo (Pacotes.Reacao)
 	private static final Int2ObjectMap<Trajeto> trajetos = new Int2ObjectOpenHashMap<>();
 	// onde ele estava montado no último quadro: {id do veículo, x,y,z (no barco: espaço do barco), yaw, tipo, -, 1 barco / 2 assento}
 	private static final Int2ObjectMap<double[]> montadoEm = new Int2ObjectOpenHashMap<>();
@@ -128,8 +128,10 @@ public final class MarcioCliente {
 
 	/** Reação procedural mandada pelo servidor (susto, hi five, livro). */
 	public static void reacao(Pacotes.Reacao r) {
-		if (r.tipo() <= 0 || r.tipo() > 5) return;
-		reacoes.computeIfAbsent(r.villager(), k -> new Reac[6])[r.tipo()] = new Reac(agora(), new Vec3(r.x(), r.y(), r.z()), r.alvo());
+		if (r.tipo() <= 0 || r.tipo() > Pacotes.Reacao.PARA) return;
+		Reac[] rs = reacoes.computeIfAbsent(r.villager(), k -> new Reac[Pacotes.Reacao.PARA + 1]);
+		if (r.tipo() == Pacotes.Reacao.PARA) { if (r.alvo() > 0 && r.alvo() < rs.length) rs[r.alvo()] = null; return; } // terminou (medir, aquecer, conversa)
+		rs[r.tipo()] = new Reac(agora(), new Vec3(r.x(), r.y(), r.z()), r.alvo());
 	}
 
 	/** /marcioanim tocar: toca a animação customizada no Márcio (só neste PC). */
@@ -205,13 +207,18 @@ public final class MarcioCliente {
 
 		// nado: entra e sai aos poucos (~0,4 s), calculado pelo tempo que passou desde o último quadro
 		float[] n = nado.computeIfAbsent(id, k -> new float[]{0f, t, 0.5f});
-		float alvo = v.isInWater() && !v.isPassenger() ? 1f : 0f, dt = Mth.clamp(t - n[1], 0f, 5f);
-		n[0] = alvo > n[0] ? Math.min(alvo, n[0] + dt / 8f) : Math.max(alvo, n[0] - dt / 8f);
+		boolean nadando = v.isInWater() && !v.isPassenger();
+		// subindo no barco da água: continua nadando até a borda e vai endireitando enquanto se puxa
+		// (antes levantava de uma vez ao montar e o corpo deitado "pulava" quase um bloco para o lado)
+		float alvo = nadando ? 1f : d.trans == SUBIR_AGUA ? (d.transFase == Trajeto.ANDA ? 1f : d.transFase == Trajeto.PASSA ? Math.max(0f, 1f - d.transV) : 0f) : 0f;
+		float dt = Mth.clamp(t - n[1], 0f, 5f);
+		n[0] = alvo > n[0] ? Math.min(alvo, n[0] + dt / 8f) : Math.max(alvo, n[0] - dt / 16f);
 		n[1] = t;
-		if (alvo > 0) n[2] = Mth.lerp(Math.min(1f, dt * 0.3f), n[2], (float) v.getFluidHeight(FluidTags.WATER)); // linha d'água nos pés
+		if (nadando) n[2] = Mth.lerp(Math.min(1f, dt * 0.3f), n[2], (float) v.getFluidHeight(FluidTags.WATER)); // linha d'água nos pés
 		d.nado = AnimPesca.inOutSine(n[0]);
 		d.agua = n[2];
 		alvos(v, st, t, partial, d);
+		Ik.solido = Ik.doMundo(v.level()); // para o Corpo.livrar não deixar braço e perna dentro dos blocos
 	}
 
 	/**
@@ -311,6 +318,8 @@ public final class MarcioCliente {
 		float aYaw = 0;
 		if (veiculo instanceof Assento as) { d.assento = as.tipo(); a = as.position(); aYaw = as.getYRot(); }
 		else if (tr != null && (tr.tipo == SENTAR || tr.tipo == LEVANTAR)) { d.assento = tr.assentoTipo; a = tr.assento; aYaw = tr.assentoYaw; }
+		d.assentoPos = a;
+		d.assentoYaw = aYaw;
 		if (a != null) {
 			float r = aYaw * Mth.DEG_TO_RAD;
 			float chao = d.assento == Lugares.CHAO || d.assento == Lugares.ENCOSTO ? 0f
@@ -340,14 +349,18 @@ public final class MarcioCliente {
 		AbstractBoat barco = veiculo instanceof AbstractBoat b ? b
 				: tr != null && tr.veiculo >= 0 && v.level().getEntity(tr.veiculo) instanceof AbstractBoat b2 ? b2 : null;
 		d.bordaEsq = null;
-		if (barco != null) d.bordaEsq = tr != null && d.transFase == Trajeto.PASSA ? tr.bordaDaPassagem(pos, barco, partial)
-				: Trajeto.mundo(barco, partial, new Vec3(Trajeto.LADO - 0.05, Trajeto.BORDA, 0.25)); // borda à esquerda dele
+		if (barco != null) {
+			Trajeto.medir(barco);
+			d.bordaEsq = tr != null && d.transFase == Trajeto.PASSA ? tr.bordaDaPassagem(pos, barco, partial)
+					: Trajeto.mundo(barco, partial, new Vec3(Trajeto.LADO - 0.05, Trajeto.BORDA, 0.25)); // borda à esquerda dele
+		}
 		d.pinto = null;
 		if (veiculo != null)
 			for (Entity e : veiculo.getPassengers())
 				if (Pescador.ehPinto(e) && e instanceof net.minecraft.world.entity.LivingEntity c) {
 					float yb = Mth.rotLerp(partial, c.yBodyRotO, c.yBodyRot) * Mth.DEG_TO_RAD;
-					d.pinto = c.getPosition(partial).add(-Mth.sin(yb) * 0.18, 0.62, Mth.cos(yb) * 0.18);
+					// cabeça: perto do topo e da frente da galinha, pelo tamanho dela
+					d.pinto = c.getPosition(partial).add(-Mth.sin(yb) * c.getBbWidth() * 0.45, c.getBbHeight() * 0.88, Mth.cos(yb) * c.getBbWidth() * 0.45);
 				}
 
 		// pés: altura do chão embaixo de cada um (em pé, em terra, fora de transição)
@@ -388,6 +401,24 @@ public final class MarcioCliente {
 			}
 			if (ba != null && of != null && ba.t0() >= of.t0()) d.ofereceT = 999f; // já bateram: para de oferecer
 		}
+		// estados contínuos: medindo o quarto, esquentando na fogueira, conversando; calor e armadura nova
+		d.medindo = false; d.aquecer = d.calor = d.armaduraPes = d.armaduraCabeca = d.conversaCom = null;
+		d.calorT = d.armaduraT = 999f;
+		if (rs != null) {
+			Reac r;
+			d.medindo = rs[Pacotes.Reacao.MEDIR] != null;
+			if ((r = rs[Pacotes.Reacao.AQUECER]) != null) d.aquecer = r.onde();
+			if ((r = rs[Pacotes.Reacao.CALOR]) != null) { d.calorT = t - r.t0(); d.calor = r.onde(); }
+			if ((r = rs[Pacotes.Reacao.ARMADURA]) != null && v.level().getEntity(r.alvo()) instanceof Entity quem) {
+				d.armaduraT = t - r.t0(); d.armaduraPes = quem.getPosition(partial); d.armaduraCabeca = quem.getEyePosition(partial);
+			}
+			if ((r = rs[Pacotes.Reacao.CONVERSA]) != null) {
+				Entity quem = v.level().getEntity(r.alvo());
+				d.conversaCom = quem != null ? quem.getEyePosition(partial) : r.onde();
+			}
+		}
+		d.chuva = veiculo == null && v.level().isRainingAt(v.blockPosition().above());
+		d.emChamas = v.isOnFire();
 		d.livro = v.getMainHandItem().is(net.minecraft.world.item.Items.BOOK);
 		d.andar = st.walkAnimationSpeed;
 		// pancada: recua para o lado contrário de onde veio

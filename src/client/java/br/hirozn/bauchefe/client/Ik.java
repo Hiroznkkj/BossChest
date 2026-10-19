@@ -14,10 +14,41 @@ import org.joml.Vector3f;
  * Espaço do modelo: pixels, y para baixo, frente = -z, esquerda do NPC = +x.
  */
 public final class Ik {
-	/** Comprimento até a mão (braço) e até o pé (perna), em pixels. */
-	public static final float BRACO = 10f, PERNA = 12f;
+	/** Comprimento até a mão (braço) e até o pé (perna), em pixels: medidos dos cubos do modelo (medir). */
+	public static float BRACO = 10f, PERNA = 12f;
+
+	/** Tem material sólido nesse ponto do mundo? (a colisão de verdade dos blocos; null = não confere) */
+	public interface Solido { boolean em(double x, double y, double z); }
+	public static Solido solido;
 
 	private Ik() {}
+
+	/** Colisão de verdade do mundo: o ponto está dentro de alguma caixa de colisão do bloco? */
+	public static Solido doMundo(net.minecraft.world.level.Level level) {
+		return (x, y, z) -> {
+			net.minecraft.core.BlockPos p = net.minecraft.core.BlockPos.containing(x, y, z);
+			var st = level.getBlockState(p);
+			if (st.isAir()) return false;
+			double lx = x - p.getX(), ly = y - p.getY(), lz = z - p.getZ();
+			for (net.minecraft.world.phys.AABB b : st.getCollisionShape(level, p).toAabbs())
+				if (lx > b.minX + 0.01 && lx < b.maxX - 0.01 && ly > b.minY + 0.01 && ly < b.maxY - 0.01 && lz > b.minZ + 0.01 && lz < b.maxZ - 0.01) return true;
+			return false;
+		};
+	}
+
+	/** Mede braço e perna pelos cubos do modelo (do pivô até a ponta), em vez de números fixos. */
+	public static void medir(ModelPart braco, ModelPart perna) {
+		BRACO = ponta(braco, 10f) - 0.5f; // a mão fica meio pixel antes da ponta
+		PERNA = ponta(perna, 12f);
+	}
+
+	private static float ponta(ModelPart p, float padrao) {
+		float[] max = {Float.NaN};
+		p.visit(new com.mojang.blaze3d.vertex.PoseStack(), (pose, caminho, i, cubo) -> {
+			if (caminho.isEmpty() || !caminho.contains("/")) max[0] = Float.isNaN(max[0]) ? cubo.maxY : Math.max(max[0], cubo.maxY);
+		});
+		return Float.isNaN(max[0]) ? padrao : max[0];
+	}
 
 	/** Ponto do mundo no espaço do modelo (antes do root). d.mx..mz é onde o corpo é desenhado; d.myaw o giro dele. */
 	public static Vector3f modelo(DadosMarcio d, Vec3 w) {

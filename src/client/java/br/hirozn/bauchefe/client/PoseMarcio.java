@@ -61,12 +61,8 @@ public final class PoseMarcio {
 		transicao(d, age, head, body, dir, esq, pernaD, pernaE, root);
 		especial(d, root, head, body, dir, esq, pernaD, pernaE);
 		if (!exportando) {
-			// reações procedurais por cima de tudo (somam com o que estiver acontecendo, até no meio de sentar)
-			livro(d, age, root, head, dir, esq);
-			hiFive(d, root, head, body, esq);
-			beirada(d, age, root, head, dir, esq);
-			susto(d, age, root, head, dir, esq);
-			dor(d, root, head, dir, esq);
+			// camadas procedurais por cima de tudo (somam com o que estiver acontecendo, até no meio de sentar)
+			Camadas.aplicar(new Corpo(d, root, head, body, dir, esq, pernaD, pernaE), age);
 			expressao(d, age, root, head, body, dir, esq);
 		}
 		// /marcioanim tocar: entra e sai em 8 ticks
@@ -119,7 +115,12 @@ public final class PoseMarcio {
 	private static void apoio(DadosMarcio d, ModelPart root, ModelPart esq, float w) {
 		if (w <= 0) return;
 		if (d.bordaEsq == null || exportando) { misturar(esq, -0.15f, 0.1f, -0.55f, w); return; }
-		alcancar(d, root, esq, d.bordaEsq, w, 0.2f);
+		alcancar(d, root, esq, d.bordaEsq, w, 0.3f);
+	}
+
+	/** Corpo só com o que alcancar precisa (root e braço esquerdo). */
+	private static Corpo corpo(DadosMarcio d, ModelPart root, ModelPart esq) {
+		return new Corpo(d, root, null, null, null, esq, null, null);
 	}
 
 	/**
@@ -127,14 +128,7 @@ public final class PoseMarcio {
 	 * (em volta do quadril sentado, ou dos pés em pé) só o quanto falta, até 'max' radianos.
 	 */
 	private static void alcancar(DadosMarcio d, ModelPart root, ModelPart esq, net.minecraft.world.phys.Vec3 alvo, float w, float max) {
-		float falta = Ik.mirar(d, root, esq, alvo, Ik.BRACO, w);
-		if (falta <= 0.3f) return;
-		org.joml.Vector3f f = Ik.noRoot(root, Ik.modelo(d, alvo));
-		float len = Mth.sqrt(f.x * f.x + f.z * f.z);
-		if (len < 1e-3f) return;
-		float altura = d.sentado ? 12f : 24f, ang = Mth.clamp(falta / altura, 0f, max) * w;
-		Ik.girarNosPes(root, -ang * f.z / len, ang * f.x / len, altura); // inclina na direção do alvo
-		Ik.mirar(d, root, esq, alvo, Ik.BRACO, w);
+		corpo(d, root, esq).alcancar(Corpo.Lado.ESQUERDO, alvo, w, max);
 	}
 
 	/**
@@ -315,7 +309,7 @@ public final class PoseMarcio {
 			pernaD.yRot -= giro * pernas * w;
 			pernaE.yRot -= giro * pernas * w;
 			// afago: a mão sobe e desce 1,5 px em cima da cabeça dele
-			alcancar(d, root, esq, d.pinto.add(0, 0.04 + 0.05 * afago, 0), w, 0.25f);
+			alcancar(d, root, esq, d.pinto.add(0, 0.04 + 0.05 * afago, 0), w, 0.35f);
 			esq.zRot += 0.06f * afago2 * w;
 			Ik.olhar(d, root, head, d.pinto, w * 0.9f);
 			return;
@@ -382,9 +376,11 @@ public final class PoseMarcio {
 			Ik.mirar(esq, new org.joml.Vector3f(2.5f, 11f, -5f), Ik.BRACO, s);
 			return;
 		}
-		// cadeira: o quadril (pivô das pernas, 12 px acima dos pés) desce até a superfície do assento
-		root.y += 12f * s;
+		// cadeira: o quadril (pivô das pernas, 12 px acima dos pés) desce até a superfície do assento, perto da
+		// beira da frente (as pernas descem por fora do assento; o Corpo.livrar acerta se ainda encostarem)
 		float h = d.assentoAltura * 16f; // altura do assento até o chão (px)
+		root.y += 12f * s;
+		root.z -= (h >= Ik.PERNA ? 6f : 3f) * s; // pés no ar: senta na beirada, com as pernas penduradas para fora
 		float coxa = h >= Ik.PERNA ? 0.25f : (float) Math.acos(Mth.clamp(h / Ik.PERNA, 0f, 1f));
 		float balanca = h >= Ik.PERNA ? 0.18f * Mth.sin(age * 0.12f) : 0f; // pés no ar: balançando
 		pernaD.xRot = Mth.lerp(s, pernaD.xRot, -coxa + balanca);
@@ -395,6 +391,18 @@ public final class PoseMarcio {
 		float impulso = Mth.sin(Mth.PI * d.pe);
 		body.xRot += 0.35f * impulso; // pega impulso para levantar e para sentar
 		head.xRot += 0.2f * impulso;
+		// assento alto (subindo de costas): as duas mãos no assento, dos lados, empurrando o corpo para cima
+		boolean subindo = d.assentoPos != null && d.assentoAltura > 0.6f
+				&& (d.trans == MarcioCliente.SENTAR && d.transFase == Trajeto.ACOMODA || d.trans == MarcioCliente.LEVANTAR && d.transFase == Trajeto.LEVANTA);
+		if (subindo) {
+			float empurra = Mth.sin(Mth.PI * d.transV);
+			float r = d.assentoYaw * Mth.DEG_TO_RAD;
+			net.minecraft.world.phys.Vec3 esqDele = new net.minecraft.world.phys.Vec3(Mth.cos(r), 0, Mth.sin(r));
+			Corpo c = new Corpo(d, root, head, body, dir, esq, pernaD, pernaE);
+			c.mao(Corpo.Lado.ESQUERDO, d.assentoPos.add(esqDele.scale(0.38)).add(0, 0.02, 0), empurra);
+			c.mao(Corpo.Lado.DIREITO, d.assentoPos.add(esqDele.scale(-0.38)).add(0, 0.02, 0), empurra);
+			return;
+		}
 		// mãos nos joelhos (a direita segura a vara, se tiver)
 		float jd = 9f;
 		Ik.mirar(dir, new org.joml.Vector3f(pernaD.x - 0.5f, pernaD.y + jd * Mth.cos(coxa), pernaD.z - jd * Mth.sin(coxa)), Ik.BRACO, s * 0.9f);
@@ -417,102 +425,6 @@ public final class PoseMarcio {
 			float alt = (Ik.PERNA - desce) - (i == 0 ? hd : he); // do quadril até o chão desse pé
 			if (alt < Ik.PERNA) perna.xRot -= (float) Math.acos(Mth.clamp(alt / Ik.PERNA, 0f, 1f)) * w;
 		}
-	}
-
-	// ---------- reações ----------
-
-	/** Envelope de uma reação: sobe em 'entra' ticks, fica, e some entre 'sai' e 'fim'. */
-	private static float envelope(float t, float entra, float sai, float fim) {
-		if (t < 0 || t >= fim) return 0f;
-		return AnimPesca.inOutSine(Math.min(t / entra, t < sai ? 1f : (fim - t) / (fim - sai)));
-	}
-
-	/** Lendo: o livro na frente do peito com as duas mãos, a cabeça olhando para ele, virando a página às vezes. Tira do bolso e guarda. */
-	private static void livro(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq) {
-		org.joml.Vector3f bolso = new org.joml.Vector3f(-5.5f, 11.5f, 0.5f), livro = new org.joml.Vector3f(0f, 8.5f, -7.5f);
-		if (d.livroT < 20 && !d.livro) { // vai ao bolso buscar
-			Ik.mirar(dir, bolso, Ik.BRACO, envelope(d.livroT, 5, 12, 20));
-			return;
-		}
-		if (d.guardaT < 18) { // guardando: do peito para o bolso
-			float e = AnimPesca.inOutSine(d.guardaT / 10f);
-			Ik.mirar(dir, new org.joml.Vector3f(livro).lerp(bolso, e), Ik.BRACO, envelope(d.guardaT, 2, 10, 18));
-			return;
-		}
-		if (!d.livro) return;
-		float w = d.livroT < 20 ? AnimPesca.inOutSine((d.livroT - 8f) / 10f) : 1f; // do bolso até a frente do peito
-		Ik.mirar(dir, new org.joml.Vector3f(livro).add(-1f, 0.5f, 0f), Ik.BRACO, w);
-		float pagina = (age % 90f) < 12f ? Mth.sin(Mth.PI * (age % 90f) / 12f) : 0f; // vira a página
-		Ik.mirar(esq, new org.joml.Vector3f(livro).add(1.5f + 2.5f * pagina, -1.5f * pagina, -1f * pagina), Ik.BRACO, w);
-		Ik.olhar(head, new org.joml.Vector3f(livro), w * 0.85f);
-	}
-
-	/** "Toca aqui": levanta a mão aberta para quem ele cumprimentou; quando batem, a mão vai até a do jogador e volta. */
-	private static void hiFive(DadosMarcio d, ModelPart root, ModelPart head, ModelPart body, ModelPart esq) {
-		if (d.maoDe == null) return;
-		float wo = envelope(d.ofereceT, 6, 92, 100), wb = envelope(d.bateT, 2, 5, 16);
-		if (wo <= 0 && wb <= 0) return;
-		net.minecraft.world.phys.Vec3 olhos = new net.minecraft.world.phys.Vec3(d.mx, d.my + 1.62, d.mz);
-		net.minecraft.world.phys.Vec3 ate = d.maoDe.subtract(olhos);
-		net.minecraft.world.phys.Vec3 lado = new net.minecraft.world.phys.Vec3(ate.x, 0, ate.z);
-		lado = lado.lengthSqr() < 1e-4 ? new net.minecraft.world.phys.Vec3(0, 0, 1) : lado.normalize();
-		net.minecraft.world.phys.Vec3 oferta = olhos.add(lado.scale(0.42)).add(0, 0.32, 0); // mão aberta acima da cabeça, na direção dele
-		net.minecraft.world.phys.Vec3 encontro = oferta.lerp(d.maoDe.add(0, 0.2, 0), 0.35); // vai ao encontro da mão do jogador
-		float e = d.bateT < 3 ? AnimPesca.inOutSine(d.bateT / 3f) : d.bateT < 16 ? 1f - AnimPesca.inOutSine((d.bateT - 3f) / 13f) : 0f;
-		net.minecraft.world.phys.Vec3 alvo = wb > 0 ? oferta.lerp(encontro, e) : oferta;
-		Ik.mirar(d, root, esq, alvo, Ik.BRACO, Math.max(wo, wb));
-		Ik.olhar(d, root, head, d.maoDe, Math.max(wo, wb) * 0.8f);
-		if (wb > 0) body.xRot -= 0.12f * e * wb; // o tranco da batida
-	}
-
-	/** Quase caindo da beirada: braços girando, corpo jogado para trás (em volta dos pés), olhando para o buraco. */
-	private static void beirada(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq) {
-		float w = d.beirada;
-		if (w <= 0) return;
-		float g = age * 0.9f;
-		misturar(dir, -1.6f + 1.3f * Mth.sin(g), 0f, 0.9f + 0.3f * Mth.cos(g), w);
-		misturar(esq, -1.6f + 1.3f * Mth.sin(g + Mth.PI), 0f, -0.9f - 0.3f * Mth.cos(g + Mth.PI), w);
-		Ik.girarNosPes(root, (-0.16f + 0.07f * Mth.sin(age * 0.7f)) * w, 0.04f * Mth.sin(age * 0.5f) * w, 24f);
-		head.xRot += 0.4f * w;
-	}
-
-	/**
-	 * Susto (raio, barulho): um pulinho, o corpo recua para longe de onde veio (girando em volta dos pés ou do
-	 * assento), as mãos protegem o rosto do lado de lá e a cabeça vira para a coisa; depois treme e volta aos poucos.
-	 * Soma com o que estiver acontecendo, até no meio de sentar ou levantar.
-	 */
-	private static void susto(DadosMarcio d, float age, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq) {
-		if (d.susto == null) return;
-		float w = envelope(d.sustoT, 3, 14, 50);
-		if (w <= 0) return;
-		org.joml.Vector3f f = Ik.noRoot(root, Ik.modelo(d, d.susto));
-		float len = Mth.sqrt(f.x * f.x + f.z * f.z);
-		float fx = len < 1e-3f ? 0 : f.x / len, fz = len < 1e-3f ? -1 : f.z / len;
-		float pulo = d.sustoT < 7 ? Mth.sin(Mth.PI * d.sustoT / 7f) : 0f;
-		root.y -= 1.6f * pulo;
-		float altura = d.sentado ? 12f : 24f;
-		Ik.girarNosPes(root, 0.2f * fz * w, -0.2f * fx * w, altura); // para longe da coisa
-		root.x += 0.2f * Mth.sin(age * 2.6f) * w * (d.sustoT > 10 ? 1f : 0f); // tremendo
-		org.joml.Vector3f rosto = new org.joml.Vector3f(fx * 3.5f, -4f, -3f + fz * 3.5f);
-		Ik.mirar(dir, new org.joml.Vector3f(rosto).add(-2.5f, 0f, 0f), Ik.BRACO, w * 0.9f);
-		Ik.mirar(esq, new org.joml.Vector3f(rosto).add(2.5f, 0f, 0f), Ik.BRACO, w * 0.9f);
-		Ik.olhar(head, f, w);
-	}
-
-	/** Pancada: recua para o lado contrário de onde veio, encolhe a cabeça e abre os braços, em meio segundo. */
-	private static void dor(DadosMarcio d, ModelPart root, ModelPart head, ModelPart dir, ModelPart esq) {
-		float w = envelope(d.dorT, 2, 3, 10);
-		if (w <= 0) return;
-		float fx = 0, fz = 1; // sem saber de onde veio, recua para trás
-		if (d.dorDe != null) {
-			org.joml.Vector3f f = Ik.noRoot(root, Ik.modelo(d, d.dorDe));
-			float len = Mth.sqrt(f.x * f.x + f.z * f.z);
-			if (len > 1e-3f) { fx = f.x / len; fz = f.z / len; }
-		}
-		Ik.girarNosPes(root, 0.24f * fz * w, -0.24f * fx * w, d.sentado ? 12f : 24f);
-		head.xRot += 0.25f * w;
-		dir.zRot += 0.3f * w;
-		esq.zRot -= 0.3f * w;
 	}
 
 	/**

@@ -25,7 +25,16 @@ import java.util.stream.Stream;
  * (y para cima, como no Blockbench). Os valores são a pose a partir do modelo parado (em pé, braços para baixo).
  */
 public final class AnimCustom {
-	public static final Path PASTA = FabricLoader.getInstance().getConfigDir().resolve("bauchefe").resolve("animacoes");
+	private static Path pasta;
+
+	/** config/bauchefe/animacoes (resolvida na primeira vez; null fora do jogo, por exemplo nos testes da pose). */
+	public static Path pasta() {
+		if (pasta == null) {
+			try { pasta = FabricLoader.getInstance().getConfigDir().resolve("bauchefe").resolve("animacoes"); }
+			catch (Exception e) { return null; }
+		}
+		return pasta;
+	}
 	/** Nomes das animações do código que dá para substituir (além das fases da pesca, AnimPesca.NOMES). */
 	public static final String PARADO = "parado";
 
@@ -87,13 +96,13 @@ public final class AnimCustom {
 			for (var e : rm.listResources("animacoes", id -> id.getNamespace().equals(BauChefe.MODID) && id.getPath().endsWith(".json")).entrySet())
 				try (Reader r = e.getValue().openAsReader()) { ler(r, e.getKey().toString(), novo); }
 				catch (Exception ex) { erro(e.getKey().toString(), ex); }
-		} catch (Exception ignorado) {} // sem resource manager ainda
-		if (Files.isDirectory(PASTA)) {
-			try (Stream<Path> l = Files.list(PASTA)) {
+		} catch (Throwable ignorado) {} // sem resource manager ainda (ou fora do jogo)
+		if (pasta() != null && Files.isDirectory(pasta())) {
+			try (Stream<Path> l = Files.list(pasta())) {
 				for (Path p : l.filter(x -> x.toString().endsWith(".json")).sorted().toList())
 					try (Reader r = Files.newBufferedReader(p)) { ler(r, p.getFileName().toString(), novo); }
 					catch (Exception ex) { erro(p.getFileName().toString(), ex); }
-			} catch (Exception ex) { erro(PASTA.toString(), ex); }
+			} catch (Exception ex) { erro(pasta().toString(), ex); }
 		}
 		anims = novo;
 		checado = System.currentTimeMillis();
@@ -108,9 +117,9 @@ public final class AnimCustom {
 
 	/** Muda quando algum .json da pasta muda (nome, tamanho ou data). */
 	private static long assinar() {
-		if (!Files.isDirectory(PASTA)) return 0;
+		if (pasta() == null || !Files.isDirectory(pasta())) return 0;
 		long h = 1;
-		try (Stream<Path> l = Files.list(PASTA)) {
+		try (Stream<Path> l = Files.list(pasta())) {
 			for (Path p : l.filter(x -> x.toString().endsWith(".json")).toList())
 				h += p.getFileName().toString().hashCode() * 31L + Files.size(p) * 17L + Files.getLastModifiedTime(p).toMillis();
 		} catch (Exception e) { return -2; }

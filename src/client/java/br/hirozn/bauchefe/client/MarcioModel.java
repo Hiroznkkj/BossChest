@@ -19,6 +19,7 @@ public class MarcioModel extends HumanoidModel<MarcioRenderState> {
 
 	public MarcioModel(ModelPart root) {
 		super(root);
+		Ik.medir(rightArm, rightLeg); // comprimento de braço e perna pelos cubos do modelo
 		// a camada de fora (chapéu, mangas, calça, jaqueta) é desenhada em 3D pela Camada3D
 		hat.visible = false;
 		for (String[] p : new String[][]{{"body", "jacket"}, {"right_arm", "right_sleeve"}, {"left_arm", "left_sleeve"},
@@ -34,6 +35,8 @@ public class MarcioModel extends HumanoidModel<MarcioRenderState> {
 		DadosMarcio d = st.bauchefe$dados();
 		PoseMarcio.aplicar(d, st.ageInTicks, root, head, body, rightArm, leftArm, rightLeg, leftLeg);
 		arrastar(d);
+		// por último: nenhum braço ou perna dentro dos blocos (depois da suavização, que é o que aparece)
+		if (d.nado < 0.05f) new Corpo(d, root, head, body, rightArm, leftArm, rightLeg, leftLeg).livrar();
 	}
 
 	/** Mistura a pose deste quadro com a do quadro anterior, pelo tempo que passou. */

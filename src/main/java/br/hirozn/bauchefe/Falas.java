@@ -10,7 +10,7 @@ import java.util.Locale;
  * e o balão mostra o texto sem as tags (balao). %s é o nome do jogador. Lista completa em FALAS.md.
  */
 public final class Falas {
-	public enum Tipo { PEIXE, RARO, VAZIO, NOITE, SEM_DOCA, ACORDOU, SONHO, BEBADO, OI, PINTO, PIADA, CANCAO, CARINHO, BOCEJO, ROUBO, DEVOLVEU, MEDO, BUSCA, CORDA, TOCA, BATEU, RAIO, APANHOU, LEITURA, PAPO }
+	public enum Tipo { PEIXE, RARO, VAZIO, NOITE, SEM_DOCA, ACORDOU, SONHO, BEBADO, OI, PINTO, PIADA, CANCAO, CARINHO, BOCEJO, ROUBO, DEVOLVEU, MEDO, BUSCA, CORDA, TOCA, BATEU, RAIO, APANHOU, LEITURA, PAPO, QUENTE, FOGO, ARMADURA, QUARTO, CONVERSA, CHUVA }
 
 	/** Uma fala: o texto (ou roteiro) e o som em assets/bauchefe/sounds/marcio (null se ainda não tem áudio). */
 	public record Linha(String texto, String som) {}
@@ -153,6 +153,31 @@ public final class Falas {
 			new Linha("Sabe o que eu queria? Um barco com dois baús.", null),
 			new Linha("[chuckling] Uma vez eu pesquei uma bota. Uso até hoje.", null)};
 
+	static final Linha[] QUENTE = { // ainda sem áudio
+			new Linha("[gasping] Opa, tá quente aqui!", null),
+			new Linha("Eita, quase chamusquei o bigode!", null),
+			new Linha("[coughing] Fogo não é brinquedo, não!", null)};
+	static final Linha[] FOGO = { // ainda sem áudio
+			new Linha("[shouting] Tô pegando fogo! Água, água!", null),
+			new Linha("[screaming] Ai ai ai, apaga, apaga!", null)};
+	static final Linha[] ARMADURA = { // ainda sem áudio; %s é o nome do jogador
+			new Linha("[impressed] Olha só, %s! Que armadura bonita!", null),
+			new Linha("Tá brilhando, hein, %s!", null),
+			new Linha("[chuckling] Com essa armadura nem o Pinto te bica!", null)};
+	static final Linha[] QUARTO = { // ainda sem áudio; %s é quantos passos ele contou
+			new Linha("%s passos... Isso é um quarto ou um armário?", null),
+			new Linha("Só %s passos de parede a parede. Meu barco é maior!", null),
+			new Linha("[sighing] %s passos. Até o Pinto ia reclamar desse quarto.", null)};
+	static final Linha[] CONVERSA = { // ainda sem áudio
+			new Linha("E aí, compadre, como tá a colheita?", null),
+			new Linha("Sabia que o peixe morde mais de manhã?", null),
+			new Linha("[chuckling] Você viu o Pinto hoje? Tá cada dia mais bonito.", null),
+			new Linha("[whispering] Dizem que tem um peixe gigante no rio.", null)};
+	static final Linha[] CHUVA = { // ainda sem áudio
+			new Linha("[sighing] Chuva... os peixes adoram, eu não.", null),
+			new Linha("Ai, molhou meu chapéu!", null),
+			new Linha("Bom pra horta, ruim pro pescador.", null)};
+
 	private Falas() {}
 
 	public static int humor(Tipo t) {
@@ -171,7 +196,10 @@ public final class Falas {
 			case RAIO -> Humor.MEDO;
 			case APANHOU -> Humor.BRAVO;
 			case LEITURA -> Humor.NEUTRO;
-			case PAPO -> Humor.PIADA;
+			case PAPO, QUARTO, CONVERSA -> Humor.PIADA;
+			case QUENTE, FOGO -> Humor.MEDO;
+			case ARMADURA -> Humor.ANIMADO;
+			case CHUVA -> Humor.TRISTE;
 		};
 	}
 
@@ -207,6 +235,12 @@ public final class Falas {
 			case APANHOU -> APANHOU;
 			case LEITURA -> LEITURA;
 			case PAPO -> PAPO;
+			case QUENTE -> QUENTE;
+			case FOGO -> FOGO;
+			case ARMADURA -> ARMADURA;
+			case QUARTO -> QUARTO;
+			case CONVERSA -> CONVERSA;
+			case CHUVA -> CHUVA;
 		};
 	}
 

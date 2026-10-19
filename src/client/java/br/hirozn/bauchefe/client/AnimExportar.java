@@ -32,7 +32,7 @@ public final class AnimExportar {
 
 	/** Exporta e devolve a pasta onde ficou. */
 	public static Path exportar() throws Exception {
-		Path pasta = AnimCustom.PASTA.resolve("originais");
+		Path pasta = AnimCustom.pasta().resolve("originais");
 		Files.createDirectories(pasta);
 		ModelPart raiz = Minecraft.getInstance().getEntityModels().bakeLayer(ModelLayers.PLAYER);
 		ModelPart[] p = new ModelPart[OSSOS.length];
