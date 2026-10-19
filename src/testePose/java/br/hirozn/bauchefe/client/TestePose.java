@@ -41,6 +41,7 @@ public final class TestePose {
 		teleporte();
 		resolvedor();
 		importar();
+		autoColisao();
 		System.out.printf("%n%d verificações, %d falhas%n", casos, falhas.size());
 		for (String f : falhas) System.out.println("  FALHOU: " + f);
 		if (!falhas.isEmpty()) System.exit(1);
@@ -332,5 +333,28 @@ public final class TestePose {
 		b.ossos().get("rightarm").rot().valor(0.5f, v);
 		ok(Math.abs(v[0] + 45) < 0.5, "formato próprio: meio do caminho", v[0], -45);
 		ok(b.apoios() != null && b.apoios().get("pes") == 1f, "formato próprio: apoios lidos", b.apoios() == null ? 0 : b.apoios().size(), 1);
+	}
+
+	/** Acenar, coçar a cabeça e as outras especiais: o braço não pode ficar dentro da cabeça depois do resolvedor. */
+	static void autoColisao() {
+		System.out.println("Auto-colisão: braço dentro da cabeça (px), pior quadro antes e depois do resolvedor");
+		List<AABB> chao = List.of(new AABB(-5, -1, -5, 5, 0, 5));
+		String[] nomes = {"", "espreguiçar", "coçar", "acenar", "comemorar", "carinho"};
+		for (int sent = 0; sent < 2; sent++) for (int anim = 1; anim < nomes.length; anim++) for (int jeito = 0; jeito < 3; jeito++) {
+			reset();
+			Colisao.mundo = Colisao.de(chao);
+			DadosMarcio d = base();
+			d.pe = sent == 1 ? 0f : 1f; d.sentado = sent == 1; d.anim = anim; d.animVar = jeito;
+			double pior0 = 0, pior1 = 0;
+			for (int q = 0; q <= 120; q++) {
+				for (ModelPart p : root.getAllParts()) p.resetPose();
+				d.agora = q; d.animTempo = q;
+				aplicar(d, q);
+				pior0 = Math.max(pior0, Resolver.autoDentro(esq()));
+				Resolver.resolver(esq(), d);
+				pior1 = Math.max(pior1, Resolver.autoDentro(esq()));
+			}
+			ok(pior1 < 1.0, String.format("%s %s (jeito %d): antes %.1f", nomes[anim], sent == 1 ? "sentado" : "em pé", jeito, pior0), pior1, 1.0);
+		}
 	}
 }
